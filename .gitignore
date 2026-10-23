@@ -20,3 +20,8 @@ checkpoints/
 report/generated/
 dist/
 *.egg-info/
+
+accounting/
+journals/
+timing/
+operator-local/

@@ -1,0 +1,18 @@
+{
+  "schema_version": "UnapprovedTimingTemplate/v1",
+  "status": "not_a_valid_execution_plan_or_permit",
+  "edition_id": null,
+  "run_id": null,
+  "population_sha256": null,
+  "record_order": null,
+  "warmup_content_sha256": null,
+  "hardware": null,
+  "concurrency": 1,
+  "passes": 3,
+  "length_slices": [
+    {"minimum": 0, "maximum": 128},
+    {"minimum": 129, "maximum": 512},
+    {"minimum": 513, "maximum": 1024}
+  ],
+  "separate_timing_execution_receipt": null
+}

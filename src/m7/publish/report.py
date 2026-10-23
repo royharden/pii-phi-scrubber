@@ -3,7 +3,7 @@
 from html import escape
 from math import isfinite
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 from .gate import PublicationDecision
 
@@ -89,14 +89,16 @@ def render_report(bundle: Mapping, *, decisions: Sequence[PublicationDecision] =
             harms.append(f"<tr><th>{arm}</th><td>{key}</td><td>{_number(value.get('value'))}</td>"
                          f"<td>{_number(value.get('numerator'))}</td><td>{_number(value.get('denominator'))}</td></tr>")
     uncertainty.append(interval_row("finetuned minus base macro F1", bundle.get("paired_fine_minus_base")))
-    return ("<!doctype html><html lang='en'><meta charset='utf-8'>"
+    qualification = ("Locked-edition execution report. Independent product acceptance remains pending."
+                     if bundle.get('schema_version') == 'EvaluationBundle/v2' else
+                     "Development scaffold. Runtime unverified; no held-out scientific result is established.")
+    document = ("<!doctype html><html lang='en'><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
             "<title>M7 synthetic redaction experiment</title><style>body{font:16px system-ui;"
             "max-width:1100px;margin:2rem auto;padding:1rem}table{border-collapse:collapse;"
             "display:block;overflow:auto}td,th{border:1px solid #bbb;padding:.5rem}"
             "pre{white-space:pre-wrap;overflow-wrap:anywhere}article{border:1px solid #aaa;padding:1rem}</style>"
-            "<h1>Synthetic log redaction experiment</h1><p><strong>Development scaffold. "
-            "Runtime unverified; no held-out scientific result is established.</strong></p>"
+            "<h1>Synthetic log redaction experiment</h1><p><strong>" + qualification + "</strong></p>"
             "<p>Missing measurements remain unavailable. No superiority, privacy guarantee or "
             "compliance certification is claimed. Negative results and failures are valid outcomes.</p>"
             "<h2>Coverage and failures</h2><table><tr><th>Arm</th><th>Status</th>"
@@ -106,8 +108,8 @@ def render_report(bundle: Mapping, *, decisions: Sequence[PublicationDecision] =
             + "</tr>" + "".join(metrics) + "</table><h2>Leaks, overredaction and availability</h2>"
             "<table><tr><th>Arm</th><th>Measure</th><th>Value</th><th>Numerator</th><th>Denominator</th></tr>"
             + "".join(harms) + "</table><h2>Timing, cost and uncertainty</h2>"
-            "<p>Controlled timing, reconciled cost and paired cluster confidence intervals are "
-            "not established by this scaffold. They require an authorized, locked experiment.</p>"
+            "<p>Only explicitly measured timing, reconciled costs and defined cluster intervals "
+            "are evidence. Missing values remain unavailable. See detailed locked-edition tables below when supplied.</p>"
             "<p>Intervals below remain unavailable with fewer than 20 effective blocks or 1,800 valid draws. "
             "Development intervals are not held-out evidence.</p><table><tr><th>Measure</th><th>Blocks</th>"
             "<th>Valid draws</th><th>Lower</th><th>Upper</th></tr>" + "".join(uncertainty) + "</table>"
@@ -116,11 +118,173 @@ def render_report(bundle: Mapping, *, decisions: Sequence[PublicationDecision] =
             "Offsets address the original decoded Unicode message (maximum 1,024 codepoints). "
             "Only one message field is transformed. Gold-aware suppression detects annotated "
             "fixture leaks; it cannot establish safety on arbitrary real-world text.</p></html>")
+    if bundle.get('schema_version') == 'EvaluationBundle/v2':
+        document = document.replace('</html>', _locked_details(bundle) + '</html>')
+    return document
+
+
+def _locked_details(bundle: Mapping) -> str:
+    """Only fixed scopes/keys/enum labels and numeric values reach HTML."""
+    def table(headers, rows):
+        return '<table><tr>' + ''.join('<th>' + escape(h) + '</th>' for h in headers) + '</tr>' + ''.join(rows) + '</table>'
+    def tr(labels, numbers):
+        return '<tr>' + ''.join('<th>' + escape(label) + '</th>' for label in labels) + ''.join('<td>' + _number(v) + '</td>' for v in numbers) + '</tr>'
+    def state(value):
+        return 'passed' if value is True else 'failed' if value is False else 'not evaluated'
+    output = ['<h2>Locked-edition accounting</h2><p>Failures and unattempted cells remain in the same intended population. '
+              'Successful-only diagnostics never replace unconditional quality. Renderer failures expose the full gold mask; '
+              'benign-only failures are unavailable without being called gold leaks.</p>']
+    extra = ('pending_N', 'budget_rejected_N', 'adapter_unavailable_N', 'interrupted_unknown_N',
+             'cancelled_N', 'preflight_rejected_N', 'physical_attempts_N', 'retry_attempts_N',
+             'attempt_metadata_missing_N', 'render_failed_N', 'publication_suppressed_N')
+    rows = bundle.get('arms', [])
+    output.append(table(('Arm', *extra), [tr((row['arm'],), [row.get(k) for k in extra]) for row in rows]))
+    interval_rows = []
+    for arm in ARMS:
+        item = next((r for r in rows if r.get('arm') == arm), {})
+        for scope in ('total', 'normal', 'challenge'):
+            values = item.get('intervals') if scope == 'total' else (item.get('slice_intervals') or {}).get(scope)
+            values = values or {}
+            for group in ('NAME', 'EMAIL', 'PHONE', 'ACCOUNT_ID', 'micro', 'macro'):
+                quality = (values.get('per_class', {}).get(group, {}) if group not in ('micro', 'macro') else values.get(group, {}))
+                for metric in ('precision', 'recall', 'f1'):
+                    interval = quality.get(metric) or {}
+                    bounds = interval.get('interval') or (None, None)
+                    interval_rows.append(tr((arm, scope, group, metric), [interval.get(k) for k in
+                        ('effective_blocks', 'executed_draws', 'valid_draws', 'undefined_draws')] + list(bounds)))
+    output.append('<h2>Absolute paired-block uncertainty</h2><p>2,000 predeclared draws; 95% percentile intervals. '
+                  'Fewer than 20 blocks or 1,800 valid draws leaves the interval undefined. Undefined draws are counted.</p>')
+    output.append(table(('Arm', 'Scope', 'Class', 'Metric', 'Blocks', 'Executed', 'Valid', 'Undefined', 'Lower', 'Upper'), interval_rows))
+    pairs = []
+    for scope in ('total', 'normal', 'challenge'):
+        values = (bundle.get('paired') or {}).get(scope) or {}
+        for metric in ('precision', 'recall', 'f1'):
+            interval = values.get('macro', {}).get(metric) or {}
+            bounds = interval.get('interval') or (None, None)
+            pairs.append(tr((scope, 'macro ' + metric), [interval.get(k) for k in
+                         ('effective_blocks', 'executed_draws', 'valid_draws', 'undefined_draws')] + list(bounds)))
+    output.append('<h2>Fine minus base, same record/block draws</h2>' + table(
+        ('Scope', 'Metric', 'Blocks', 'Executed', 'Valid', 'Undefined', 'Lower', 'Upper'), pairs))
+    harm_keys = ('residual_sensitive_codepoints', 'records_with_residual', 'benign_codepoints_redacted',
+                 'benign_record_overredaction', 'unavailable', 'unsafe_or_unavailable')
+    harm_rows = []
+    paired_quality = []
+    for row in rows:
+        for scope in ('total', 'normal', 'challenge'):
+            metrics = (row.get('metrics') if scope == 'total' else (row.get('slices') or {}).get(scope)) or {}
+            uncertainty = (row.get('intervals') if scope == 'total' else (row.get('slice_intervals') or {}).get(scope)) or {}
+            for key in harm_keys:
+                point = metrics.get(key) or {}
+                ci = uncertainty.get(key) or {}
+                harm_rows.append(tr((row['arm'], scope, key), [point.get(k) for k in ('value', 'numerator', 'denominator')]
+                                   + list(ci.get('interval') or (None, None))))
+    for scope in ('total', 'normal', 'challenge'):
+        values = (bundle.get('paired') or {}).get(scope) or {}
+        for group in ('NAME', 'EMAIL', 'PHONE', 'ACCOUNT_ID', 'micro'):
+            quality = values.get('micro', {}) if group == 'micro' else values.get('per_class', {}).get(group, {})
+            for key in ('precision', 'recall', 'f1'):
+                ci = quality.get(key) or {}
+                paired_quality.append(tr((scope, group, key), [ci.get(k) for k in ('valid_draws', 'undefined_draws')]
+                                         + list(ci.get('interval') or (None, None))))
+    output.append('<h2>Failure-aware harm rates by slice</h2>' + table(
+        ('Arm', 'Scope', 'Measure', 'Value', 'Numerator', 'Denominator', 'Lower95', 'Upper95'), harm_rows))
+    output.append('<h2>Paired class and micro differences</h2>' + table(
+        ('Scope', 'Class', 'Metric', 'Valid', 'Undefined', 'Lower95', 'Upper95'), paired_quality))
+    secondary = []
+    for row in rows:
+        diagnostic = row.get('successful_only') or {}
+        for group in ('micro', 'macro'):
+            quality = diagnostic.get(group) or {}
+            secondary.append(tr((row['arm'], group), [quality.get(m, {}).get('value') for m in ('precision', 'recall', 'f1')]))
+    output.append('<h2>Successful-only diagnostics (secondary)</h2>' + table(('Arm', 'Metric', 'Precision', 'Recall', 'F1'), secondary))
+    cost = bundle.get('cost') or {}
+    cost_keys = ('attempts_N', 'known_provider_cash_micros', 'provider_cash_total_micros',
+                 'unresolved_liability_micros', 'unknown_attempts', 'cap_micros', 'remaining_micros',
+                 'electricity_micros', 'hardware_amortization_micros', 'compute_seconds', 'economic_total_micros')
+    output.append('<h2>Full experiment cost and unresolved liability</h2><p>Amounts are micro-units of the '
+                  'authenticated common invoice currency. Remaining cap is informational; authorizations cannot borrow '
+                  'each other\'s budget. Verified zero provider cash does not establish zero electricity, amortization '
+                  'or total economic cost. Training and inference scopes must both be present.</p>')
+    output.append(table(('Measure', 'Value'), [tr((key,), (cost.get(key),)) for key in cost_keys]))
+    currency = cost.get('currency')
+    output.append('<p>Currency: ' + (escape(currency) if isinstance(currency, str) and len(currency) == 3 else 'unknown')
+                  + '. Complete training/inference scope: ' + state(cost.get('scope_complete'))
+                  + '. Authorization overrun: ' + ('yes' if cost.get('over_cap') is True else
+                     'no' if cost.get('over_cap') is False else 'unknown') + '.</p>')
+    category_keys = ('attempts_N', 'known_provider_cash_micros', 'unresolved_liability_micros', 'unknown_attempts',
+                     'known_usage_units', 'unknown_usage_attempts')
+    output.append(table(('Category', *category_keys), [tr((category,), [(cost.get('by_category') or {}).get(category, {}).get(key)
+                        for key in category_keys]) for category in ('training', 'inference', 'retry', 'failed_trial')]))
+    output.append(table(('Attempt state', 'Count'), [tr((key,), ((cost.get('states') or {}).get(key),))
+                  for key in ('reserved', 'succeeded', 'failed', 'cancelled', 'unknown')]))
+    arm_cost_keys = ('known_provider_cash_micros', 'provider_cash_total_micros', 'unresolved_liability_micros',
+                     'unknown_attempts', 'training_allocation_micros', 'economic_total_micros')
+    output.append('<p>Per-arm inference cash below reflects immutable attempt-time receipts. Later global '
+                  'invoice reconciliation can be known while an arm allocation remains unknown. No training '
+                  'amortization is invented.</p>' + table(('Arm', *arm_cost_keys), [tr((row['arm'],),
+                  [(row.get('cost') or {}).get(key) for key in arm_cost_keys]) for row in rows]))
+    timing = bundle.get('timing') or {}
+    timing_rows = []
+    timing_keys = ('cold_startup_ms', 'intended_samples_N', 'attempted_samples_N', 'answered_samples_N',
+                   'failed_samples_N', 'all_attempt_p50_ms', 'all_attempt_p95_ms', 'successful_only_p50_ms',
+                   'successful_only_p95_ms', 'attempts_per_second', 'answered_per_second')
+    for row in timing.get('arms', []):
+        arm = row.get('arm')
+        if arm not in ARMS:
+            continue
+        timing_rows.append(tr((arm, 'network frontier' if arm == 'frontier' else 'offline local'), [row.get(k) for k in timing_keys]))
+    output.append('<h2>Controlled concurrency-1 timing</h2><p>Three fixed-order warmed passes; detector, validation '
+                  'and renderer included. Gold safety/scoring/bootstrap overhead is separate. Frontier includes '
+                  'network/provider latency; its cold figure is client initialization, not provider-server model load. '
+                  'Local cold figures cover model initialization; OS/process cache effects require qualification.</p>')
+    output.append(table(('Arm', 'Execution', *timing_keys), timing_rows))
+    timing_slices = []
+    subset_keys = ('intended_samples_N', 'attempted_samples_N', 'answered_samples_N', 'failed_samples_N',
+                   'all_attempt_p50_ms', 'all_attempt_p95_ms', 'answered_per_second')
+    for row in timing.get('arms', []):
+        if row.get('arm') not in ARMS:
+            continue
+        for index, data in enumerate(row.get('passes', []), 1):
+            timing_slices.append(tr((row['arm'], 'pass ' + str(index)), [data.get(k) for k in subset_keys]))
+        for data in row.get('length_slices', []):
+            low, high = data.get('minimum'), data.get('maximum')
+            label = ('length ' + str(low) + '..' + str(high)) if type(low) is int and type(high) is int else 'undefined length'
+            timing_slices.append(tr((row['arm'], label), [data.get(k) for k in subset_keys]))
+    output.append(table(('Arm', 'Fixed pass/length slice', *subset_keys), timing_slices))
+    hardware = timing.get('hardware') or {}
+    output.append('<p>Hardware context: ' + '; '.join(escape(key) + '=' + escape(str(hardware[key]))
+                   for key in ('cpu', 'gpu', 'ram_gib', 'driver', 'precision', 'batch_size',
+                               'package_lock_sha256', 'environment_sha256') if key in hardware) + '</p>')
+    output.append('<p>Evaluator safety/scoring/uncertainty overhead ms: ' + _number(bundle.get('safety_scoring_overhead_ms')) + '</p>')
+    adoption = bundle.get('adoption') or {}
+    gates = adoption.get('gates') or {}
+    output.append('<h2>Pre-test locked adoption rule</h2><p>Floors apply to the total test set only. '
+                  'A macro win cannot excuse a weak class. Passing remains a candidate for independent review; '
+                  'this report never issues deployment or product acceptance.</p>')
+    output.append('<p>' + ('Candidate for independent review.' if adoption.get('status') == 'candidate_only' else
+                  'Retain the benchmark and recommend no deployment; missing or failed gates remain visible.') + '</p>')
+    output.append(table(('Gate', 'Result'), ['<tr><th>' + escape(key) + '</th><td>' + state(gates.get(key)) + '</td></tr>'
+                  for key in ('all_classes_meet_total_set_floors', 'positive_paired_macro_f1', 'no_increased_residual_leak',
+                              'zero_structure_failures', 'full_intended_accounting', 'all_four_arms_attempted_full_population',
+                              'closed_edition', 'cost_reconciled', 'attempt_lineage_complete')]))
+    floor_keys = ('precision', 'precision_floor', 'recall', 'recall_floor', 'recall_lower95', 'recall_lower95_floor')
+    output.append(table(('Class', *floor_keys), [tr((row['label'],), [row.get(k) for k in floor_keys])
+                  for row in adoption.get('per_class', []) if row.get('label') in ('NAME', 'EMAIL', 'PHONE', 'ACCOUNT_ID')]))
+    return ''.join(output)
 
 
 def write_report(bundle: Mapping, destination: Path, *,
-                 decisions: Sequence[PublicationDecision] = ()) -> None:
+                 decisions: Sequence[PublicationDecision] = (),
+                 approve_artifact: Callable[[str], bool]) -> bool:
     """Exclusive creation prevents silently replacing a prior experiment edition."""
     document = render_report(bundle, decisions=decisions)
+    approved = approve_artifact(document) is True
+    if not approved:
+        document = ('<!doctype html><html lang="en"><meta charset="utf-8">'
+                    '<title>Output suppressed</title><h1>Output suppressed</h1>'
+                    '<p>Artifact validation rejected this document. Upstream failures remain scored.</p></html>')
+        if approve_artifact(document) is not True:
+            raise ValueError('suppression_card_not_safe_to_publish')
     with destination.open("x", encoding="utf-8") as handle:
         handle.write(document)
+    return approved

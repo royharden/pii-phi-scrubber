@@ -21,6 +21,8 @@
   "training_selection": ["development_macro_exact_f1", "recall", "lower_cost"],
   "thresholds": null,
   "model_pins": null,
+  "approved_adoption_policy": null,
+  "timing_plan_sha256": null,
   "spend_cap": null,
   "primary_metric": "exact_span_and_label_f1",
   "bootstrap": {"paired_cluster_draws": 2000, "minimum_valid_draws": 1800},

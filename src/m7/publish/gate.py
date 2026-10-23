@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from html import escape, unescape
 import json
+import unicodedata
 from urllib.parse import quote, unquote
 
 from m7.contracts import LogRecord, RenderResult, Span
@@ -73,3 +74,28 @@ def gate_record(record: LogRecord, gold: tuple[Span, ...],
         if any(variant in surface for variant in variants for surface in surfaces):
             return reject("assembled_value_detected")
     return PublicationDecision(True, "approved", safe.message)
+
+
+def artifact_is_safe(document: str, sources: tuple[tuple[LogRecord, tuple[Span, ...]], ...]) -> bool:
+    """Gold-aware whole-artifact value scan, before any public persistence.
+
+    No source values/hashes or exception messages escape. Normalized checks are
+    conservative supplemental alerts, never a general de-identification claim.
+    """
+    if not isinstance(document, str) or len(document.encode('utf-8')) > 16_000_000:
+        return False
+    surfaces = (document, unescape(document), unquote(document), unescape(unquote(document)))
+    normalized = tuple(unicodedata.normalize('NFKC', surface).casefold() for surface in surfaces)
+    for record, spans in sources:
+        for span in spans:
+            if not 0 <= span.start < span.end <= len(record.log.message):
+                return False
+            value = record.log.message[span.start:span.end]
+            variants = {value, escape(value, quote=True), quote(value, safe=''),
+                        json.dumps(value, ensure_ascii=True)[1:-1],
+                        json.dumps(value, ensure_ascii=False)[1:-1]}
+            if any(variant in surface for variant in variants for surface in surfaces):
+                return False
+            if any(unicodedata.normalize('NFKC', value).casefold() in surface for surface in normalized):
+                return False
+    return True

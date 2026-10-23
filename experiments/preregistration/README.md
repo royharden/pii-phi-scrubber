@@ -27,3 +27,12 @@ independent edition, preserving the old result. No content repair retries; at mo
 one declared transient transport retry, retaining all attempt costs/liabilities.
 Actual permits, licensed artifacts, training, four-arm execution, custody audit
 and independent product acceptance remain open.
+# Locked evaluation source
+
+`m7.experiment.LockedEdition` is the immutable future execution boundary. It pins
+the full intended record/hash population, all four arm configurations and external
+custody/audit/pre-test-selection/authorization receipts. A development template is
+never converted into a lock by running a shape validator. See
+[the lifecycle and authority contract](../../docs/experiment.md). No executed lock
+or sealed result has been created by source construction.
+

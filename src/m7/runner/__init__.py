@@ -123,4 +123,9 @@ def run_offline(records: Sequence[EvaluationRecord],
     return bundle
 
 
-__all__ = ["EvaluationRecord", "run_offline"]
+# Locked execution is separate from the public development entrypoint. It requires
+# a current receipt verifier, a sealed corpus and an explicit journal writer.
+from m7.experiment import AdapterBinding, EditionJournal, LockedEdition, execute_edition
+
+__all__ = ["EvaluationRecord", "run_offline", "AdapterBinding", "EditionJournal",
+           "LockedEdition", "execute_edition"]

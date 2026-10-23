@@ -25,3 +25,13 @@ It cannot discover undeclared shared generators, verify labels, enforce custody 
 certify independent authorship. A structurally valid training permit/receipt similarly
 cannot authenticate approvals, licenses or real execution. Future independent audit
 must examine the actual pinned artifacts and custody process.
+
+The sealed activation path requires an externally provisioned trusted operator host,
+authenticated D4 native-isolation/file-policy capability and D5 pre-test target lock.
+No OS enforcement, receipt issuer, provider-aware tokenizer or approved environment
+is fabricated here. The source interfaces have not been runtime-qualified together.
+Uncertain journal begins cannot be retried; abandoned writer locks and torn writes
+require authorized investigation. Timing interruptions remain incomplete rather than
+silently rerunning passes. Cold initialization excludes unverified process/OS cache
+effects; network frontier figures cannot establish provider-server startup latency.
+Offline replay is restricted to byte-identical approved reports and never reopens gold.

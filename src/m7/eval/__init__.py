@@ -72,7 +72,10 @@ def score(observations: Sequence[Observation]) -> dict:
                          "null_reason": None if all(v is not None for v in values) else "undefined_class",
                          "defined_classes": sum(v is not None for v in values), "class_count": len(LABELS)}
     unsafe = sum(not r.available or not r.structure_valid or bool(_mask(r.gold) - _mask(r.predicted)) for r in observations)
-    return {"per_class": per_class, "micro": quality(total), "macro": macro,
+    answered = sum(r.available and r.structure_valid for r in observations)
+    return {"corpus_N": len(observations), "eligible_N": len(observations),
+            "answered_N": answered, "error_N": len(observations) - answered,
+            "per_class": per_class, "micro": quality(total), "macro": macro,
             "residual_sensitive_codepoints": ratio(residual, sensitive),
             "records_with_residual": ratio(leak_records, len(observations)),
             "benign_codepoints_redacted": ratio(removed_benign, benign),

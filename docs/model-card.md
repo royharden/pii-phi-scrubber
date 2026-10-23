@@ -28,6 +28,15 @@ remain in the intended population. Entirely unrun arms have null metrics. Undefi
 classes and insufficient bootstrap units remain null. Normal/challenge comparisons
 do not isolate template novelty from entity novelty. Costs/timing are unmeasured.
 
+Source now implements those future reports: unconditional and successful-only
+diagnostics, whole-block paired 95% intervals with explicit undefined-draw counts,
+complete training/inference cash and liability projections, fixed concurrency-one
+three-pass timing with cold/warm separation, and D5 pre-test locked class/adoption
+targets. All actual outcomes remain unrun. A failed or unknown gate retains a
+no-deployment recommendation; a positive engineering result is only a candidate
+for nonauthoring finished-product review. Full OS-enforced custody and real receipt
+authentication are required operator integrations, not supplied fake implementations.
+
 Intended use is local research on bounded English synthetic logs. Real clinical data,
 other languages, arbitrary formats, hidden encodings, long traces, co-reference and
 production privacy/compliance decisions are outside scope. See LIMITATIONS.md.
