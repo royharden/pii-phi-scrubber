@@ -105,3 +105,13 @@ lock or a compatibility receipt. Later activation must pin and verify exact vers
 Budget/retry/cancellation/parity/CLI source exists; no branch has been exercised.
 Later activation must check all reserve/receipt/cancel/replay/error paths and ensure
 the host persists diagnostics alongside D7's journal. No full-M7 gate is closed.
+
+The isolated worker/session source is documented in
+`contracts/adapters/worker-wire.md`. It adds record-only bounded stdio, parent-brokered
+ledgers and explicit native process/file enforcement dependencies. Pure shared profile
+P and exact launch L helpers live in `m7.providers.worker_profile`; D4's guard binds P
+and the exact per-process verifier binds P plus L. A process or directory alone is
+never treated as isolation. `--validate-worker` is definition-only; `--worker` is a
+verified launcher's pipe service, not an independent custody approval. Native launcher,
+actual platform verifier, approved runtime/application receipts and an approved
+frontier source factory remain activation dependencies; no worker was started.

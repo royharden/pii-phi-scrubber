@@ -110,3 +110,8 @@ with `local-backbone`, hashes all other fields, and must match architecture_sha2
 These declarations are not authenticated training/selection receipts; D5/D7 authority
 must verify their exact lineage/lock digests before opening held-out evaluation.
 
+For process/file-separated held-out inference, use the explicit WorkerSessionProtocol
+and native enforcement gate in [worker-wire.md](worker-wire.md). Shared profile and
+exact per-arm launch hashing/membership come only from `m7.providers.worker_profile`;
+the in-process registry itself does not certify worker isolation or custody.
+

@@ -9,6 +9,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import sys
 
 from _common import emit, guarded
 from pydantic import TypeAdapter
@@ -98,6 +99,31 @@ def infer_records(records: tuple[LogRecord, ...], registry, *, emit_prediction=e
 
 
 def main():
+    if sys.argv[1:] == ["--worker"]:
+        # Only the explicitly verified parent launcher supplies this stdio mode.
+        # No spec/path flag, module import name or credentials come from its wire.
+        from m7.providers.worker_service import serve_worker
+        return serve_worker(sys.stdin.buffer, sys.stdout.buffer)
+    if "--validate-worker" in sys.argv[1:]:
+        from m7.providers.worker import validate_worker_spec
+        from m7.providers.worker_profile import WorkerLaunchPolicy, WorkerProfile
+        from m7.providers.worker_wire import MAX_BOOTSTRAP_BYTES, WorkerBootstrap, decode_line
+        worker_parser = argparse.ArgumentParser(description="Validate only; never launch a worker")
+        worker_parser.add_argument("--validate-worker", action="store_true", required=True)
+        worker_parser.add_argument("--bootstrap", type=Path, required=True)
+        worker_parser.add_argument("--policy", type=Path, required=True)
+        worker_parser.add_argument("--profile", type=Path, required=True)
+        worker_args = worker_parser.parse_args()
+        def read_boundary(path, schema):
+            with path.open("rb") as source:
+                raw = source.read(MAX_BOOTSTRAP_BYTES + 1)
+            if not raw.endswith(b"\n"):
+                raw += b"\n"
+            return decode_line(raw, schema, limit=MAX_BOOTSTRAP_BYTES)
+        emit(validate_worker_spec(read_boundary(worker_args.bootstrap, WorkerBootstrap),
+                                  read_boundary(worker_args.policy, WorkerLaunchPolicy),
+                                  profile=read_boundary(worker_args.profile, WorkerProfile)))
+        return 0
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--spec", type=Path, required=True)
     parser.add_argument("--validate-only", action="store_true")
