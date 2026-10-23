@@ -1,0 +1,51 @@
+"""Explicit offset conversion; never normalize, approximate or repair boundaries."""
+from collections.abc import Sequence
+from typing import Literal
+
+from m7.contracts import Span
+from .contracts import AdapterFault
+
+
+def codepoint_boundary(text: str, offset: int,
+                       unit: Literal["unicode_codepoint", "utf8_byte", "utf16_codeunit"]) -> int:
+    if type(offset) is not int or offset < 0:
+        raise AdapterFault("invalid_output")
+    if unit == "unicode_codepoint":
+        if offset > len(text):
+            raise AdapterFault("invalid_output")
+        return offset
+    if unit not in ("utf8_byte", "utf16_codeunit"):
+        raise AdapterFault("invalid_output")
+    position = 0
+    for index, char in enumerate(text):
+        if position == offset:
+            return index
+        position += len(char.encode("utf-8")) if unit == "utf8_byte" else len(char.encode("utf-16-le")) // 2
+        if position > offset:
+            raise AdapterFault("invalid_output")
+    if position != offset:
+        raise AdapterFault("invalid_output")
+    return len(text)
+
+
+def token_span(text: str, offsets: Sequence[tuple[int, int]], start_token: int,
+               end_token: int, label: str) -> Span:
+    """Map a half-open token range from a fast tokenizer's original-text map.
+
+    Special tokens (0,0), inverted/out-of-bounds and backward maps are invalid in
+    an entity. Whitespace gaps are allowed; no substring search or normalization.
+    """
+    if (type(start_token) is not int or type(end_token) is not int
+            or not 0 <= start_token < end_token <= len(offsets)):
+        raise AdapterFault("invalid_output")
+    selected = offsets[start_token:end_token]
+    previous = -1
+    previous_end = -1
+    for start, end in selected:
+        if (type(start) is not int or type(end) is not int
+                or not 0 <= start < end <= len(text) or start < previous or end < previous_end):
+            raise AdapterFault("invalid_output")
+        previous = start
+        previous_end = end
+    return Span(start=selected[0][0], end=selected[-1][1], label=label)
+
