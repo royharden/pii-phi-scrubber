@@ -1,0 +1,133 @@
+"""Strict value-free span wire; offsets address original Unicode code points."""
+from __future__ import annotations
+
+import hashlib
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+Label = Literal['NAME', 'EMAIL', 'PHONE', 'ACCOUNT_ID']
+Arm = Literal['regex', 'frontier', 'base', 'finetuned']
+Identifier = Annotated[str, Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$')]
+Digest = Annotated[str, Field(pattern=r'^[0-9a-f]{64}$')]
+
+
+class Boundary(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, extra='forbid', hide_input_in_errors=True)
+
+
+class Span(Boundary):
+    start: Annotated[int, Field(ge=0)]
+    end: Annotated[int, Field(gt=0)]
+    label: Label
+    confidence: Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)] | None = None
+
+    @model_validator(mode='after')
+    def ordered(self) -> Span:
+        if self.start >= self.end:
+            raise ValueError('invalid_span_bounds')
+        return self
+
+
+class LogFields(Boundary):
+    timestamp: Annotated[str, Field(pattern=r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$')]
+    level: Literal['DEBUG', 'INFO', 'WARN', 'ERROR']
+    event: Literal['request', 'account', 'contact', 'authentication', 'diagnostic']
+    message: Annotated[str, Field(max_length=1024)]
+
+    @model_validator(mode='after')
+    def valid_unicode(self) -> LogFields:
+        if any(0xD800 <= ord(c) <= 0xDFFF for c in self.message):
+            raise ValueError('invalid_unicode')
+        return self
+
+
+class LogRecord(Boundary):
+    schema_version: Literal['LogRecord/v1'] = 'LogRecord/v1'
+    record_id: Identifier
+    split_id: Identifier
+    synthetic: Literal[True] = True
+    content_sha256: Digest
+    log: LogFields
+
+    @model_validator(mode='after')
+    def correct_hash(self) -> LogRecord:
+        if message_hash(self.log.message) != self.content_sha256:
+            raise ValueError('content_hash_mismatch')
+        return self
+
+
+class Prediction(Boundary):
+    schema_version: Literal['Prediction/v1'] = 'Prediction/v1'
+    run_id: Identifier
+    record_id: Identifier
+    content_sha256: Digest
+    arm: Arm
+    model_id: Identifier
+    attempt_id: Identifier
+    status: Literal['ok', 'invalid_output', 'unavailable', 'failed', 'cancelled']
+    spans: tuple[Span, ...] = ()
+    duration_ms: Annotated[float, Field(ge=0, allow_inf_nan=False)] | None = None
+    usage_ref: Identifier | None = None
+    error_code: Literal['invalid_output', 'identity_mismatch', 'invalid_bounds', 'unavailable', 'backend_failure', 'truncated', 'permit_required', 'cancelled'] | None = None
+    unanchored_count: Annotated[int, Field(ge=0, le=128)] = 0
+
+    @model_validator(mode='after')
+    def coherent(self) -> Prediction:
+        if len(self.spans) > 128 or (self.status != 'ok' and self.spans):
+            raise ValueError('invalid_prediction_state')
+        if (self.status == 'ok') != (self.error_code is None):
+            raise ValueError('invalid_prediction_state')
+        # Retain the maximum optional confidence for each exact candidate triple.
+        unique: dict[tuple[int, int, str], Span] = {}
+        for span in self.spans:
+            key = (span.start, span.end, span.label)
+            old = unique.get(key)
+            if old is None or (span.confidence is not None and (old.confidence is None or span.confidence > old.confidence)):
+                unique[key] = span
+        ordered = tuple(unique[k] for k in sorted(unique))
+        object.__setattr__(self, 'spans', ordered)
+        return self
+
+
+class ReplacementInterval(Boundary):
+    start: int
+    end: int
+    placeholder: str
+    candidate_ids: tuple[int, ...]
+    cross_label: bool
+    same_label: bool
+    nested: bool
+
+
+class RenderResult(Boundary):
+    record_id: Identifier
+    content_sha256: Digest
+    renderer_version: Literal['union/v1'] = 'union/v1'
+    safe_log: LogFields | None = None
+    intervals: tuple[ReplacementInterval, ...] = ()
+    schema_valid: bool
+    error_code: Literal['invalid_prediction', 'invalid_structure'] | None = None
+
+
+def message_hash(message: str) -> str:
+    return hashlib.sha256(message.encode('utf-8')).hexdigest()
+
+
+def make_record(message: str, record_id: str, split_id: str = 'development', *, timestamp: str = '2026-01-01T00:00:00Z', level: str = 'INFO', event: str = 'diagnostic') -> LogRecord:
+    return LogRecord(record_id=record_id, split_id=split_id, content_sha256=message_hash(message), log=LogFields(timestamp=timestamp, level=level, event=event, message=message))
+
+
+def failure(record: LogRecord, *, run_id: str, arm: Arm, model_id: str, error_code: str = 'invalid_output', status: str = 'invalid_output', attempt_id: str = 'attempt-1') -> Prediction:
+    return Prediction(run_id=run_id, record_id=record.record_id, content_sha256=record.content_sha256, arm=arm, model_id=model_id, attempt_id=attempt_id, status=status, error_code=error_code)
+
+
+def validate_prediction(record: LogRecord, prediction: Prediction) -> Prediction:
+    code = None
+    if prediction.record_id != record.record_id or prediction.content_sha256 != record.content_sha256:
+        code = 'identity_mismatch'
+    elif any(s.end > len(record.log.message) for s in prediction.spans):
+        code = 'invalid_bounds'
+    if code:
+        return failure(record, run_id=prediction.run_id, arm=prediction.arm, model_id=prediction.model_id, attempt_id=prediction.attempt_id, error_code=code)
+    return prediction
