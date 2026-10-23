@@ -76,7 +76,9 @@ class WindowsControlVerifier(Protocol):
     Supported Win32 query APIs cannot enumerate inherited handle access, inspect
     another process environment, or prove network/descendant restrictions. The
     operating host MUST supply current native-backed verification for those exact
-    facts, or qualification fails closed. This adapter never fabricates them.
+    facts, or qualification fails closed. ReadOnlyWindowsControlVerifier provides
+    supported job/mitigation/handle checks; remaining facts need its explicit live
+    external observer. No implementation fabricates unsupported observations.
     """
     def verify_policy(self, evidence: WindowsPolicyEvidence, capability, request, profile) -> bool: ...
     def verify_process(self, approval: WindowsProcessApproval, observation: NativeObservation, spec, policy) -> bool: ...

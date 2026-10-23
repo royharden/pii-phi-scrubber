@@ -19,6 +19,14 @@ from .native_windows import WindowsIsolationVerifier, WindowsWorkerProcessVerifi
 from .native_windows_models import (
     NativeObservation, NativeQualificationResult, WindowsControlVerifier, WindowsPolicyEvidence, WindowsProcessApproval,
 )
+from .native_controls import ReadOnlyWindowsControlVerifier
+from .native_context_registry import BorrowedContextRegistry
+from .native_d6_context import D6WindowsContextProvider
+from .native_controls_models import (
+    BorrowedNativeContext, ControlQualificationReport, ExternalControlFact, ExternalControlObservation,
+    MitigationRequirement, NativeContextBinding, NativeControlContextProvider, NativeExternalObservationProvider,
+    NativeHandleBinding, WindowsControlPolicy,
+)
 
 __all__ = [
     'Ancestor', 'BlockAssignment', 'CorpusBundle', 'CorpusManifest', 'CorpusPlan', 'Family',
@@ -36,4 +44,7 @@ __all__ = [
     'build_audit_handoff', 'verify_independent_audit',
     'WindowsIsolationVerifier', 'WindowsWorkerProcessVerifier', 'NativeObservation', 'NativeQualificationResult',
     'WindowsControlVerifier', 'WindowsPolicyEvidence', 'WindowsProcessApproval',
+    'ReadOnlyWindowsControlVerifier', 'BorrowedContextRegistry', 'D6WindowsContextProvider', 'BorrowedNativeContext', 'ControlQualificationReport',
+    'ExternalControlFact', 'ExternalControlObservation', 'MitigationRequirement', 'NativeContextBinding',
+    'NativeControlContextProvider', 'NativeExternalObservationProvider', 'NativeHandleBinding', 'WindowsControlPolicy',
 ]
