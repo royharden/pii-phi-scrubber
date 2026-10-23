@@ -24,3 +24,19 @@ Provider/model library seams, journal fsync/locking, isolation enforcement and
 cross-package behavior have not been exercised. The operator module and native
 platform enforcement are deployment-owned integrations, with no permissive fake
 implementation in this source. Negative results and unknowns must stay visible.
+
+The isolated campaign consumer now joins D5's canonical WorkerLaunchBundle/Handoff
+and edition helpers to D4's separately committed inference/evaluator exports and
+D6's lazy WorkerSession bindings. Shared P versus exact L follows the adopted pure
+D6 membership helpers; prepared qualification has no running-process dependency.
+Current receipts/resources are rechecked before dispatch. Parent-only ledger-store
+identity is sealed so resume cannot silently switch to fresh budget databases.
+Unverified owned cleanup blocks automatic reuse with a private investigation marker.
+Default campaign validation does not import an operator host or start a worker.
+
+C remains primary-evaluation integration source. Controlled timing through the
+ordinary isolated replay-cached worker is explicitly unavailable until a separately
+approved warm phase/reset contract exists; cached replies and cold respawns are not
+substituted. Real native launch/control verification, actual frontier worker factory,
+provider/model permits and all runtime/import/OS/DB/stdio/financial/crash behavior
+remain unverified. No product has been accepted or deployed.

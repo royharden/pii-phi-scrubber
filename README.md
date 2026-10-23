@@ -57,6 +57,51 @@ trusted operator; no credential files are read by the evaluation CLI.
 
 ## One locked edition, one durable evaluation
 
+The preferred isolated entrypoint consumes D5's joined `WorkerLaunchBundle/v1` or
+`WorkerLaunchHandoff/v1`. Default mode validates operator definitions only:
+
+```powershell
+python scripts/eval.py --launch-bundle C:/approved/campaign.workers.json `
+  --lock C:/approved/locked-edition.json --authorization C:/approved/evaluation-authorization.json
+```
+
+No operator module, receipt service, raw/gold export, database, model or worker is
+used by validation. It checks the canonical D5 bundle and immutable edition; it is
+never authority or process proof. Future explicit isolated primary evaluation:
+
+```powershell
+python scripts/eval.py --launch-bundle C:/approved/campaign.workers.json --execute-campaign `
+  --lock C:/approved/locked-edition.json --authorization C:/approved/evaluation-authorization.json `
+  --operator-host approved_m7_host:create_campaign_host `
+  --custody-lifecycle C:/private-custody/lifecycle --journal C:/evaluator-private/edition-journal `
+  --inference-export C:/inference-only/edition --inference-export-sha256 <custodian-export-sha256> `
+  --gold-export C:/evaluator-private/edition-gold --gold-export-sha256 <custodian-gold-export-sha256> `
+  --out report/generated/edition
+```
+
+`create_campaign_host(bundle, edition)` returns `IsolatedCampaignHost`: original
+receipt verification/revocation, D4 filesystem/native guard, actual restricted native
+launcher and exact-process verifier, parent-only per-arm ledgers, authenticated
+training accounting and billing reconciliation. No permissive launcher, fake OS
+proof or provider/model fallback is supplied. Missing real prerequisites fail explicitly.
+Workers receive approved bootstrap/configuration and opaque records, never gold,
+provenance, custody/export/ledger paths, host modules or inherited credentials.
+
+D6's canonical shared profile P contains member hashes excluding only `profile_sha256`;
+full exact per-arm L includes P. Campaign/capability/release/guard bind the same P.
+Profile qualification is prelaunch. Exact PID/start/image/native-rights checks bind
+P+L after launch and before messages. A subprocess alone is not isolation.
+Pre-channel `authority + require_released` never consumes open; `execute_edition`
+alone first-opens after corpus preflight. Owned workers close on all exit paths;
+unverified cleanup writes a private investigation marker and blocks automatic reuse.
+Closed-edition replay starts no worker. See [the consumer contract](docs/experiment.md).
+
+This isolated path currently covers primary evaluation. Its `--run-timing` request
+fails explicitly until an approved worker phase/reset contract retains a warm backend
+with fresh per-pass controllers. Cached replies are not timing, and a new cold process
+is not a warmed pass. The lower-level timing SOURCE below remains available to a
+separately qualified host; no timing outcome is fabricated or silently substituted.
+
 The [executor contract](docs/experiment.md) fixes identical record/hash populations
 and all four arm pins. It gives adapters only standalone inference records. The
 trusted evaluator separately holds gold and block/slice metadata. Pre-test D5 locks,

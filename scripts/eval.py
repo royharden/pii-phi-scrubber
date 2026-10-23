@@ -20,6 +20,59 @@ from m7.experiment import (EditionJournal, EvaluationAuthorization, LockedEditio
 from m7.publish import write_locked_artifacts
 
 
+def campaign_mode(args):
+    """Validate by default; never import the operator host until explicit execution."""
+    from m7.training.launch_bundle import load_launch_bundle
+    from m7.experiment.campaign import CampaignPrerequisiteError, execute_isolated_campaign, validate_campaign_inputs
+    from m7.experiment.isolated import IsolatedCampaignHost
+    if args.lock is None or args.authorization is None:
+        raise ValueError('campaign_edition_and_authorization_definitions_required')
+    bundle = load_launch_bundle(args.launch_bundle)
+    edition = load_boundary(args.lock, LockedEdition)
+    authorization = load_boundary(args.authorization, EvaluationAuthorization)
+    validation = validate_campaign_inputs(bundle, edition, authorization)
+    if not args.execute_campaign:
+        if args.out is not None:
+            raise ValueError('validation_cannot_write_artifacts')
+        emit(validation)
+        return 0
+    required = ('operator_host', 'custody_lifecycle', 'journal', 'inference_export', 'gold_export',
+                'inference_export_sha256', 'gold_export_sha256', 'out')
+    missing = [key for key in required if getattr(args, key) is None]
+    if args.validate_only or missing:
+        emit({'status': 'unavailable', 'reason': 'explicit_campaign_activation_inputs_required',
+              'missing_fields': missing, 'product_acceptance': False})
+        return 3
+    if args.run_timing:
+        # WorkerSession's record replay cache is NOT a warmed timing pass. Never
+        # silently return it, change IDs, or include a new cold load as warmed time.
+        emit({'status': 'unavailable', 'reason': 'approved_isolated_worker_timing_phase_required',
+              'worker_started': False, 'product_acceptance': False})
+        return 3
+    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*', args.operator_host):
+        raise ValueError('trusted_operator_module_required')
+    module, factory = args.operator_host.split(':')
+    try:
+        host = getattr(importlib.import_module(module), factory)(bundle, edition)
+    except Exception:
+        emit({'status': 'unavailable', 'reason': 'authenticated_operator_host_unavailable', 'product_acceptance': False})
+        return 3
+    if not isinstance(host, IsolatedCampaignHost):
+        emit({'status': 'unavailable', 'reason': 'native_campaign_host_required', 'product_acceptance': False})
+        return 3
+    try:
+        result = execute_isolated_campaign(bundle, edition, authorization, host=host,
+            lifecycle_root=args.custody_lifecycle, journal_directory=args.journal,
+            inference_directory=args.inference_export, gold_directory=args.gold_export,
+            inference_export_sha256=args.inference_export_sha256, gold_export_sha256=args.gold_export_sha256,
+            artifact_directory=args.out)
+    except CampaignPrerequisiteError as error:
+        emit({'status': 'unavailable', 'reason': error.code, 'product_acceptance': False})
+        return 3
+    emit(result)
+    return 0 if result['edition_state'] == 'closed' and result['comparison_status'] == 'fully_attempted' else 3
+
+
 def execute_locked(args):
     """Future trusted operator activation. No automatic host/provider selection."""
     required = ('lock', 'authorization', 'selection_lock', 'targets', 'custody_bundle',
@@ -88,6 +141,13 @@ def main():
     parser.add_argument("--validate-lock", type=Path,
                         help="inspect a future lock only; never opens its edition")
     parser.add_argument('--execute-locked', action='store_true')
+    parser.add_argument('--launch-bundle', type=Path, help='D5 WorkerLaunchBundle/Handoff; validation is default')
+    parser.add_argument('--validate-only', action='store_true')
+    parser.add_argument('--execute-campaign', action='store_true')
+    parser.add_argument('--inference-export', type=Path)
+    parser.add_argument('--gold-export', type=Path)
+    parser.add_argument('--inference-export-sha256')
+    parser.add_argument('--gold-export-sha256')
     parser.add_argument('--lock', type=Path)
     parser.add_argument('--authorization', type=Path)
     parser.add_argument('--selection-lock', type=Path)
@@ -106,8 +166,14 @@ def main():
     parser.add_argument("--arms", choices=("regex", "none"), default="none")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
-    if sum((bool(args.validate_lock), args.execute_locked, bool(args.view_result), bool(args.edition))) != 1:
+    if sum((bool(args.validate_lock), args.execute_locked, bool(args.view_result), bool(args.edition), bool(args.launch_bundle))) != 1:
         parser.error('choose_exactly_one_mode')
+    if args.execute_campaign and not args.launch_bundle:
+        parser.error('campaign_execution_requires_launch_bundle')
+    if args.launch_bundle:
+        return campaign_mode(args)
+    if args.validate_only:
+        parser.error('validate_only_is_a_campaign_mode')
     if args.execute_locked:
         return execute_locked(args)
     if args.view_result:

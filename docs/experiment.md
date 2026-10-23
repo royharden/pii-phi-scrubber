@@ -143,3 +143,47 @@ For a shape-only future check: `python scripts/eval.py --validate-lock <lock.jso
 This does not authenticate, seal, open or execute the edition. Programmatic execution
 must be activated only after Dirty Mode closes and actual custody/license/resource
 and environment gates have been satisfied.
+
+## Joined isolated campaign
+
+`m7.experiment.campaign.validate_campaign_inputs` consumes D5 `WorkerLaunchBundle`,
+`LockedEdition` and `EvaluationAuthorization`, reusing D5 `validate_launch_bundle`
+and `campaign_arm_pins`. It does not reselect checkpoints, repair bootstraps, create
+profiles or issue authority. D5 `load_launch_bundle` is the strict bounded CLI loader.
+Default `--launch-bundle` mode never imports an operator host or reads private data.
+
+Explicit `execute_isolated_campaign` freshly calls D5 `prepare_launch_bundle` with
+real receipt/native qualification. D5 `d7_worker_definitions(prepared.bundle)` supplies
+the internal worker views and the preparation receipt pins each L. Shared P and full per-arm L come only from D6's
+pure helpers. P equals campaign/capability/release/guard. Exact process verification
+receives PID/start identity and full L after native launch, before messages. A
+prepared campaign does not depend on an already-running worker.
+
+`read_released_channels` verifies D4's separate inference/evaluator export commitments,
+authenticated receipts, exact file sets/manifests, read-time byte hashes and population.
+The evaluator alone reads gold/block/slice data. No raw CorpusBundle is read in this
+path. No custody, training, export or ledger path enters a child message.
+
+`IsolatedRegistry` is lazy. Preflight/predict recheck current release, finance,
+profile and launch rights. D6 supplies native launch, exact process attestation,
+bounded stdio, sealed population, parent ledger broker and owned cleanup. The bridge
+validates/unwraps `AttemptEvent.attempt`. Pre-dispatch guard failures are known
+no-request diagnostics; uncertain sent calls retain failure/liability.
+
+The host supplies real parent-only ledgers at disjoint evaluator paths and an
+authenticated current training accounting snapshot bound to the original closeout.
+Fixed per-arm allocations and bounded closed training liabilities enforce the
+combined campaign budget without cap borrowing. Each live ledger remains atomic.
+Historical overruns, unknown liability and unallocated economics remain visible.
+
+Sessions close in `finally`. Unverified cleanup creates a private marker requiring
+investigation before reuse. No unrelated process is located or terminated. The native
+launcher must own/bound its entire process/job tree. Actual OS/token/ACL/job/stdio,
+cancellation/crash behavior has not been exercised.
+
+The isolated primary session caches one sealed population. It cannot silently
+serve controlled timing. Until a separately approved phase/reset contract preserves
+the warm backend and supplies fresh logical controllers, isolated `--run-timing`
+is explicitly unavailable. No cold-respawn timing or changed IDs are substituted.
+This remaining source seam is not a measured timing failure or complete scientific
+product acceptance.

@@ -95,10 +95,19 @@ def combined_cost_summary(summaries: dict[str, dict], *, currency: str,
             or set(required_scopes) - {'training', 'inference', 'timing'}
             or set(summaries) != set(required_scopes)):
         raise ValueError('complete_cost_scopes_required')
-    ids = [s.get('authorization_id') for s in summaries.values()]
+    combined = merge_cost_authorizations(tuple(summaries.values()), currency=currency)
+    combined['scope_complete'] = True
+    return combined
+
+
+def merge_cost_authorizations(summaries: tuple[dict, ...], *, currency: str) -> dict:
+    """Shared arithmetic for distinct authorization ledgers, not a spend permit."""
+    if not summaries or not isinstance(currency, str) or re.fullmatch('[A-Z]{3}', currency) is None:
+        raise ValueError('cost_authorizations_and_currency_required')
+    ids = [s.get('authorization_id') for s in summaries]
     if any(not isinstance(identity, str) or not identity for identity in ids) or len(set(ids)) != len(ids):
         raise ValueError('duplicate_or_missing_cost_authorization')
-    reports = [cost_report(summary) for summary in summaries.values()]
+    reports = [cost_report(summary) for summary in summaries]
     keys = ('cap_micros', 'known_provider_cash_micros', 'unresolved_liability_micros', 'unknown_attempts', 'attempts_N')
     combined = {key: sum(row[key] for row in reports) for key in keys}
     combined['remaining_micros'] = max(0, combined['cap_micros'] - combined['known_provider_cash_micros']
@@ -106,10 +115,10 @@ def combined_cost_summary(summaries: dict[str, dict], *, currency: str,
     combined['by_category'] = {category: {key: sum(row['by_category'][category][key] for row in reports)
                                         for key in COUNT_KEYS} for category in CATEGORIES}
     combined['states'] = {state: sum(row['states'][state] for row in reports) for state in STATES}
-    combined['scope_complete'] = True
+    combined['scope_complete'] = False
     combined['currency'] = currency
     combined['any_authorization_over_cap'] = any(row['over_cap'] for row in reports)
     return combined
 
 
-__all__ = ['EconomicAllocation', 'cost_report', 'combined_cost_summary']
+__all__ = ['EconomicAllocation', 'cost_report', 'combined_cost_summary', 'merge_cost_authorizations']

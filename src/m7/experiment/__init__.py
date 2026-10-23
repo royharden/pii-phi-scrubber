@@ -9,6 +9,9 @@ from .adoption import AdoptionPolicy, ClassFloor, adoption_report
 from .costing import EconomicAllocation, combined_cost_summary, cost_report
 from .timing import HardwareContext, LengthSlice, TimingPlan, TimingWorker, run_timing
 from .activation import OperatorHost, policy_from_selection_lock, timing_worker_factory
+from .isolated import IsolatedCampaignHost, IsolatedRegistry, WorkerDefinition
+from .released import read_released_channels
+from .campaign import execute_isolated_campaign, validate_campaign_inputs
 
 __all__ = ['ARMS', 'AdapterBinding', 'ArmPin', 'CellResult', 'CustodyGold', 'EditionJournal',
            'EvaluationAuthorization', 'ReceiptAuthority',
@@ -17,4 +20,6 @@ __all__ = ['ARMS', 'AdapterBinding', 'ArmPin', 'CellResult', 'CustodyGold', 'Edi
            'AdoptionPolicy', 'ClassFloor', 'adoption_report', 'EconomicAllocation',
            'combined_cost_summary', 'cost_report', 'HardwareContext', 'LengthSlice',
            'TimingPlan', 'TimingWorker', 'run_timing', 'OperatorHost',
-           'policy_from_selection_lock', 'timing_worker_factory']
+           'policy_from_selection_lock', 'timing_worker_factory', 'IsolatedCampaignHost',
+           'IsolatedRegistry', 'WorkerDefinition', 'read_released_channels',
+           'execute_isolated_campaign', 'validate_campaign_inputs']

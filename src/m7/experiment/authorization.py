@@ -41,8 +41,9 @@ class ReceiptAuthority:
         self.authorization = authorization
         self.verify_receipt = verify_receipt
 
-    def __call__(self, edition: LockedEdition, resume: bool) -> None:
-        packet = self.authorization
+    @staticmethod
+    def validate_binding(packet: EvaluationAuthorization, edition: LockedEdition) -> None:
+        """Pure binding/expiry check. Does not authenticate or consume custody open."""
         now = datetime.now(timezone.utc)
         if not utc_time(packet.issued_at) <= now < utc_time(packet.expires_at):
             raise ValueError('evaluation_authorization_expired')
@@ -59,6 +60,9 @@ class ReceiptAuthority:
                 or utc_time(packet.expires_at) < utc_time(edition.expires_at)
                 or commitment(packet.model_dump(mode='json')) != edition.execution_authorization_sha256):
             raise ValueError('evaluation_authorization_binding_mismatch')
+
+    def __call__(self, edition: LockedEdition, resume: bool) -> None:
+        self.validate_binding(self.authorization, edition)
         for kind, digest in (
             ('evaluation_authorization', edition.execution_authorization_sha256),
             ('custody_release', edition.custody_release_sha256),
