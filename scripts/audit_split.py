@@ -5,6 +5,9 @@ from pathlib import Path
 
 from _common import emit, guarded, load_json
 
+from m7.data import CorpusManifest, CorpusPlan, FamilyInventory, audit_inventory, commitment
+from m7.data.storage import read_bundle
+
 
 def inspect_manifest(manifest: dict) -> dict:
     if set(manifest) != {"schema_version", "blocks"} or manifest["schema_version"] != "SplitManifest/v1":
@@ -52,8 +55,30 @@ def inspect_manifest(manifest: dict) -> dict:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--bundle-dir", type=Path)
+    parser.add_argument("--inventory", type=Path)
+    parser.add_argument("--plan", type=Path)
     args = parser.parse_args()
-    result = inspect_manifest(load_json(args.manifest))
+    manifest = load_json(args.manifest)
+    if manifest.get('schema_version') == 'CorpusManifest/v1':
+        if args.bundle_dir is None or args.inventory is None or args.plan is None:
+            raise ValueError('full_custody_audit_inputs_required')
+        declared = CorpusManifest.model_validate_json(args.manifest.read_bytes())
+        bundle = read_bundle(args.bundle_dir)
+        inventory = FamilyInventory.model_validate_json(args.inventory.read_bytes())
+        plan = CorpusPlan.model_validate_json(args.plan.read_bytes())
+        if (bundle.manifest != declared or commitment(inventory) != declared.inventory_sha256
+                or commitment(plan) != declared.plan_sha256):
+            raise ValueError('audit_input_commitment_mismatch')
+        audit = audit_inventory(inventory, bundle.assignments, plan,
+                                development_only=declared.scope == 'development_only')
+        if commitment(audit) != declared.audit_sha256:
+            raise ValueError('recomputed_audit_mismatch')
+        result = audit.model_dump(mode='json')
+        result.pop('component_by_family')
+    else:
+        # Legacy declarations do not prove guide/label/content integrity.
+        result = inspect_manifest(manifest)
     emit(result)
     return 2 if result["status"] == "blocked" or not result.get("minimum_count_met", False) else 0
 
