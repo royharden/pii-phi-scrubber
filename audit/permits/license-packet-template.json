@@ -1,0 +1,8 @@
+{
+  "schema_version": "LicensePacket/v1",
+  "approved": false,
+  "approved_by": "UNAPPROVED",
+  "training_allowed": false,
+  "derivatives_allowed": false,
+  "artifacts": {"model": null, "tokenizer": null, "train": null, "dev": null}
+}

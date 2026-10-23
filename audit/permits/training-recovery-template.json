@@ -1,0 +1,13 @@
+{
+  "schema_version": "TrainingRecoveryAuthorization/v1",
+  "authorization_id": "UNAPPROVED",
+  "edition_id": "UNAPPROVED",
+  "plan_sha256": null,
+  "permit_sha256": null,
+  "run_started_sha256": null,
+  "stopped_worker_receipt_sha256": null,
+  "allowed_action": "account_interrupted_no_restart",
+  "approved_by": "UNAPPROVED",
+  "issued_at": null,
+  "expires_at": null
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": "ExecutionPermit/v2",
+  "authorization_id": "UNAPPROVED",
+  "approved": false,
+  "training_allowed": false,
+  "plan_sha256": null,
+  "edition_id": "UNAPPROVED",
+  "license_packet_sha256": null,
+  "custody_audit_sha256": null,
+  "resource_id": "UNAPPROVED",
+  "cap_micros": 0,
+  "currency": "USD",
+  "issued_at": null,
+  "expires_at": null,
+  "approved_by": "UNAPPROVED"
+}

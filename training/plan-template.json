@@ -1,0 +1,23 @@
+{
+  "schema_version": "TrainingPlan/v2",
+  "edition_id": "UNAPPROVED",
+  "backend": "gliner_local",
+  "resource_id": "UNAPPROVED",
+  "artifacts": {
+    "model": {"path": "artifacts/model", "kind": "tree", "sha256": null},
+    "tokenizer": {"path": "artifacts/tokenizer", "kind": "tree", "sha256": null},
+    "train": {"path": "artifacts/train.json", "kind": "file", "sha256": null},
+    "dev": {"path": "artifacts/dev.json", "kind": "file", "sha256": null},
+    "config": {"path": "artifacts/config.json", "kind": "file", "sha256": null},
+    "environment": {"path": "artifacts/environment.json", "kind": "file", "sha256": null},
+    "license_packet": {"path": "artifacts/license.json", "kind": "file", "sha256": null},
+    "custody_audit": {"path": "artifacts/custody.json", "kind": "file", "sha256": null}
+  },
+  "trials": [{"trial_id": "trial-1", "seed": 0, "learning_rate": 0.00001, "batch_size": 1}],
+  "max_epochs": 1,
+  "max_steps": 1,
+  "max_seconds_per_trial": 60,
+  "per_trial_worst_case_micros": 0,
+  "selection_rule": "dev_macro_exact_f1_then_recall_then_lower_cost",
+  "sealed_test_access": false
+}

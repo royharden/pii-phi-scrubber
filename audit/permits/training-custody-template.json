@@ -1,0 +1,11 @@
+{
+  "schema_version": "TrainingCustody/v1",
+  "edition_id": "UNAPPROVED",
+  "approved": false,
+  "author_id": "UNAPPROVED",
+  "auditor_id": "UNAPPROVED",
+  "allowed_splits": ["train", "dev"],
+  "train_sha256": null,
+  "dev_sha256": null,
+  "test_access_allowed": false
+}

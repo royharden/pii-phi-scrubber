@@ -1,0 +1,7 @@
+{
+  "schema_version": "TrainingEnvironment/v1",
+  "python": null,
+  "packages": {"gliner": null, "torch": null, "transformers": null, "accelerate": null, "safetensors": null},
+  "resource_id": "UNAPPROVED",
+  "device": "cpu"
+}

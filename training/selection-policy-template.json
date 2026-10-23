@@ -1,0 +1,18 @@
+{
+  "schema_version": "DevSelectionPolicy/v1",
+  "edition_id": "UNAPPROVED",
+  "experiment_plan_sha256": null,
+  "training_plan_sha256": null,
+  "dev_sha256": null,
+  "rule": {
+    "schema_version": "DevSelectionRule/v1",
+    "name": "dev_macro_exact_f1_then_recall_then_lower_cost",
+    "thresholds": [0.3, 0.5, 0.7],
+    "bootstrap_seed": 7,
+    "bootstrap_draws": 2000,
+    "minimum_blocks": 20,
+    "minimum_valid_draws": 1800,
+    "cost_policy": "actual_else_reserved_upper_bound"
+  },
+  "registered_at": null
+}

@@ -1,0 +1,176 @@
+"""Lazy, local GLiNER integration. Exact pinned versions need runtime qualification."""
+from __future__ import annotations
+
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
+import logging
+import math
+import os
+from pathlib import Path
+
+from .artifacts import load_object
+from .executor import EngineResult, TrainingOOM, TrialContext
+
+
+@contextmanager
+def _offline_quiet():
+    settings = {"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1",
+                "HF_DATASETS_OFFLINE": "1", "HF_HUB_DISABLE_TELEMETRY": "1",
+                "WANDB_DISABLED": "true", "TOKENIZERS_PARALLELISM": "false"}
+    previous = {k: os.environ.get(k) for k in settings}
+    previous_logging = logging.root.manager.disable
+    try:
+        os.environ.update(settings)
+        logging.disable(logging.CRITICAL)
+        with open(os.devnull, "w", encoding="utf-8") as sink:
+            with redirect_stdout(sink), redirect_stderr(sink):
+                yield
+    finally:
+        logging.disable(previous_logging)
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+def _examples(model, rows, config) -> list[dict]:
+    examples = []
+    tokenizer = model.data_processor.transformer_tokenizer
+    model_word_cap = getattr(model.config, "max_len", None)
+    model_width = getattr(model.config, "max_width", None)
+    if type(model_word_cap) is not int or type(model_width) is not int:
+        raise ValueError("unsupported_model_limit_contract")
+    descriptions = dict(zip(config["labels"], config["label_descriptions"], strict=True))
+    for row in rows:
+        message = row["record"].log.message
+        token_lists, starts, ends = model.prepare_inputs([message])
+        tokens, left, right = token_lists[0], starts[0], ends[0]
+        if not tokens or len(tokens) > model_word_cap:
+            raise ValueError("training_would_truncate_words")
+        # Count the exact same prompt/word representation as D6, never a plain
+        # text estimate that can miss label-description/special-token overhead.
+        inputs, _ = model.data_processor.prepare_inputs([tokens], config["label_descriptions"])
+        encoded = tokenizer(inputs, is_split_into_words=True, truncation=False,
+                            padding=False, add_special_tokens=True)["input_ids"]
+        if len(encoded) != 1 or len(encoded[0]) > min(config["max_model_tokens"], tokenizer.model_max_length):
+            raise ValueError("training_would_truncate_tokens")
+        for index, token in enumerate(tokens):
+            if message[left[index]:right[index]] != token:
+                raise ValueError("training_token_mapping_mismatch")
+        begin = {v: i for i, v in enumerate(left)}
+        finish = {v: i for i, v in enumerate(right)}
+        ner = []
+        for span in row["spans"]:
+            if span.start not in begin or span.end not in finish:
+                raise ValueError("training_gold_not_token_aligned")
+            first, last = begin[span.start], finish[span.end]
+            if last < first or last - first + 1 > model_width:
+                raise ValueError("training_span_width_unsupported")
+            ner.append([first, last, descriptions[span.label]])
+        examples.append({"tokenized_text": tokens, "ner": ner, "ner_labels": config["label_descriptions"]})
+    return examples
+
+
+class LocalGLiNEREngine:
+    """One local trial/device. Cost remains unknown without a real billing receipt."""
+
+    def run(self, context: TrialContext) -> EngineResult:
+        context.heartbeat()
+        if int(os.environ.get("WORLD_SIZE", "1")) != 1:
+            raise ValueError("distributed_training_not_authorized")
+        model_config = load_object(context.paths["model"] / "gliner_config.json")
+        configured = model_config.get("model_name")
+        if not isinstance(configured, str) or Path(configured).resolve() != context.paths["tokenizer"]:
+            raise ValueError("local_backbone_tokenizer_pin_required")
+        with _offline_quiet():
+            # Lazy imports only after executor permit/pins/reservation checks.
+            import torch
+            from gliner import GLiNER
+            from gliner.training import Trainer, TrainingArguments
+            import transformers
+            from transformers import TrainerCallback, set_seed
+
+            if context.environment["device"] == "cuda:0" and torch.cuda.device_count() != 1:
+                raise ValueError("exactly_one_visible_authorized_gpu_required")
+            trial, plan = context.trial, context.plan
+            set_seed(trial["seed"])
+            model = GLiNER.from_pretrained(
+                str(context.paths["model"]), local_files_only=True, token=False,
+                strict=True, load_tokenizer=False, map_location=context.environment["device"])
+            train_data = _examples(model, context.train_rows, context.config)
+            dev_data = _examples(model, context.dev_rows, context.config)
+            base_collator = model._create_data_collator()
+
+            def collator(samples):
+                context.heartbeat()
+                batch = base_collator(samples)
+                if batch["input_ids"].shape[-1] > context.config["max_model_tokens"]:
+                    raise ValueError("collator_token_cap_exceeded")
+                # Both full word count and last mapped word must survive every
+                # actual training batch, not only the launch preflight.
+                lengths = batch["text_lengths"].reshape(-1).tolist()
+                masks = batch["words_mask"]
+                if lengths != [len(s["tokenized_text"]) for s in samples]:
+                    raise ValueError("collator_word_truncation")
+                for index, length in enumerate(lengths):
+                    present = set(masks[index].reshape(-1).tolist())
+                    if not set(range(1, length + 1)).issubset(present):
+                        raise ValueError("collator_subtoken_truncation")
+                return batch
+
+            for sample in train_data + dev_data:
+                collator([sample])
+
+            class Guard(TrainerCallback):
+                def on_step_begin(self, args, state, control, **kwargs):
+                    context.heartbeat()
+                    if state.global_step >= plan["max_steps"]:
+                        raise ValueError("training_step_cap_exceeded")
+                    return control
+
+                def on_step_end(self, args, state, control, **kwargs):
+                    context.heartbeat()
+                    return control
+
+                def on_epoch_begin(self, args, state, control, **kwargs):
+                    context.heartbeat()
+                    if state.epoch is not None and state.epoch >= plan["max_epochs"]:
+                        raise ValueError("training_epoch_cap_exceeded")
+                    return control
+
+            class FailClosedTrainer(Trainer):
+                # GLiNER's custom step skips OOM batches. HF's step propagates
+                # errors while retaining GLiNER's compute_loss and optimizer.
+                training_step = transformers.Trainer.training_step
+
+            steps = min(plan["max_steps"],
+                        math.ceil(len(train_data) / trial["batch_size"]) * plan["max_epochs"])
+            args = TrainingArguments(
+                output_dir=str(context.output_dir / "work"),
+                learning_rate=float(trial["learning_rate"]),
+                per_device_train_batch_size=trial["batch_size"],
+                per_device_eval_batch_size=trial["batch_size"],
+                num_train_epochs=plan["max_epochs"], max_steps=steps,
+                seed=trial["seed"], data_seed=trial["seed"],
+                gradient_accumulation_steps=1, dataloader_num_workers=0,
+                remove_unused_columns=False, report_to=[], disable_tqdm=True,
+                logging_strategy="no", save_strategy="no", eval_strategy="no",
+                use_cpu=context.environment["device"] == "cpu", bf16=False, fp16=False)
+            trainer = FailClosedTrainer(model=model, args=args, train_dataset=train_data,
+                                        eval_dataset=dev_data, data_collator=collator,
+                                        callbacks=[Guard()])
+            try:
+                trainer.train(resume_from_checkpoint=None)
+                context.heartbeat()
+                checkpoint = context.output_dir / "checkpoint"
+                checkpoint.mkdir(exist_ok=False)
+                model.save_pretrained(str(checkpoint), safe_serialization=True, push_to_hub=False)
+                model.data_processor.transformer_tokenizer.save_pretrained(str(checkpoint))
+            except (torch.cuda.OutOfMemoryError, MemoryError):
+                raise TrainingOOM() from None
+            except RuntimeError as exc:
+                if "out of memory" in str(exc).lower():
+                    raise TrainingOOM() from None
+                raise
+            return EngineResult(optimizer_steps=int(trainer.state.global_step),
+                                epochs=float(trainer.state.epoch))

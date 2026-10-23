@@ -1,0 +1,10 @@
+{
+  "schema_version": "PreTestLockApproval/v1",
+  "approval_id": "UNAPPROVED",
+  "approved_by": "UNAPPROVED",
+  "approved": false,
+  "allowed_action": "lock_targets_before_heldout",
+  "binding_sha256": null,
+  "issued_at": null,
+  "expires_at": null
+}
