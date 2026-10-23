@@ -78,3 +78,18 @@ installs or modifies that enforcement. A subprocess/path alone is not evidence.
 Unapproved templates contain no real hashes or permits; validate-only never grants
 activation. The host-injected --activate path fails explicitly if the real host
 is absent, and never runs a training/model/evaluation workload itself.
+
+## Joined worker handoff qualification
+
+WorkerLaunchBundle/v1/WorkerLaunchHandoff/v1 do not authenticate themselves.
+Preparation additionally requires current worker_launch_bundle and worker_bootstrap
+approvals. Shared profile P and every exact member/full L/bootstrap/application/
+runtime/root pin must match the existing campaign/capability. D7 receives the typed
+prepared bundle and exact descriptors, not a second selection validator.
+
+D4 WindowsIsolationVerifier's authenticated prepared-policy qualification is
+prelaunch and requires no running worker. Exact PID/start/image/P+L native process
+proof belongs to WindowsWorkerProcessVerifier only after D6's owned launch and
+before messages. No prelaunch campaign can satisfy or fabricate that process proof.
+Default CLI remains nonexecuting and structural validity grants no source/model/
+provider/native authority. Prior prepared receipts must be freshly requalified.

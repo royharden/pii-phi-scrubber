@@ -406,11 +406,138 @@ activation, worker/file separation, cost concurrency and operator journey behavi
 remain runtime-unverified and require later authorized validation. No real
 campaign, terms approval, isolation verdict or independent acceptance was created.
 
-Current source reconciliation note: D4's edition capability binds one shared
-worker-policy/profile digest. D6's per-arm launch policy additionally pins its
-bootstrap/executable/entrypoint, and distinct arms naturally have distinct launch
-hashes. CampaignSpec retains the shared profile commitment; the actual D6/D7
-launcher must attest each exact allowed launch as a member of that approved
-profile. Different launch hashes must never be asserted equal. This seam was
-reported to INT for the D6/D7 owners; until those source owners reconcile it,
-activation must remain unavailable rather than weakening the isolation check.
+The shared-profile seam is reconciled under INT SEAM-DECISION-WORKER-PROFILE-R1.
+CampaignSpec now carries D6's canonical WorkerProfile/v1 and four exact
+WorkerLaunchPolicy/v2 objects, using pure `worker_profile_digest` and
+`validate_worker_membership` helpers from `m7.providers.worker_profile`.
+The profile stores arm/member hashes excluding ONLY profile_sha256; its digest is
+P. Each full exact launch includes P and has a separate full digest L. Full L is
+not put back into the profile, avoiding a hash cycle. D4's existing
+worker_policy_sha256 means P, and D6 checks membership/approved full L and exact
+bootstrap at every launch/message. Different full launch hashes are never equated.
+
+Campaign validation binds every launch's arm/edition/corpus/filesystem policy and
+local artifact root, and optional file checks pin executable/entrypoint bytes and
+operator scratch paths using D4 checked_path. Preparation authenticates shared
+worker_profile_approval, each worker_launch_approval, application-manifest and
+runtime-environment receipts. Worker runtime environment is a separate pin from
+the original training environment. Activation receipt exposes P and the four L
+digests; no launch/process attestation or native enforcement is fabricated. D7
+retains exact bootstrap validation, owned process/session and custody-open control.
+These launch records add approved code/scratch/inference asset paths only; actual
+native enforcement must deny training/raw/gold/credential roots and inherited
+handles. The evaluator never sends the entire campaign to an inference child.
+
+## Joined exact-worker launch bundle and D7 loader handoff
+
+`m7.training.launch_bundle` is the canonical joined producer/reader. Its
+WorkerLaunchBundle/v1 embeds CampaignSpec, exact four D6 WorkerBootstrap objects,
+and canonical WorkerMembership results. It pins campaign digest/P and each exact
+bootstrap/member/full-L, without generating a second profile or selecting models
+again. `build_worker_launch_bundle(spec, bootstraps)` is definition-only; it reads
+no assets/DBs, invokes no models/native controls and starts no processes. Callers
+must supply actual approved configs/bootstrap/code/runtime pins; the new null
+JSON template is not a ready or approved bundle.
+
+`validate_launch_bundle(bundle, check_files=False)` checks all four campaign/D7
+ArmPins (including canonical D6 regex model/config), selected config/decoder/
+threshold/tokenizer/weights, permits/policies, exact run/session/lifetime/intended
+count, disjoint scratch directories and P/member/L via D6's pure helpers. Minimal
+bootstrap sets are those of D6 WorkerBootstrap; fine includes base parity metadata
+without changing either locked artifact root. Every bootstrap is <=2 MB; joined
+bundle <=12 MB. Optional check_files uses the existing read-only artifact/code/path
+checks and the current regex source hash. It still grants no activation.
+
+D7's as-built internal `m7.experiment.isolated.WorkerDefinition(bootstrap,launch)`
+is reused by `d7_worker_definitions(bundle)`; this is a parent-only view, not a
+second JSON schema. `validate_campaign_edition(bundle, edition)` joins exact
+run/edition/plan/corpus/population, four ArmPins, selection lock, custody release,
+execution/audit authorization, adoption-policy and timing-plan commitments. It
+never reads gold or consumes D4 open. D7 then owns original ReceiptAuthority,
+CustodyLifecycle, journal and IsolatedRegistry construction/dispatch.
+
+`prepare_launch_bundle(bundle, host=CampaignHost)` authenticates the bundle and
+all exact bootstraps, then calls the existing current campaign authority and D4
+prelaunch guard. It returns PreparedLaunchBundle containing the typed bundle,
+typed PreparedCampaign and value-free LaunchBundlePreparationReceipt/v1. It
+requires no running worker/PID/process attestation: WindowsIsolationVerifier is
+prelaunch prepared-policy qualification. Exact WindowsWorkerProcessVerifier with
+PID/start_identity/P/full-L belongs strictly to D6/D7 AFTER actual launch and
+before worker messages. No generic process claim is inferred from preparation.
+
+`prepared.descriptors()` returns WorkerLaunchDescriptor(arm,bootstrap,policy,
+membership) in regex/frontier/base/finetuned order and rejects mutation against its
+receipt commitment. OS launcher, actual process verifier and any frontier registry
+factory remain trusted host-injected code. JSON carries no arbitrary provider
+module/factory import, training/gold/custody path or ledger location in bootstraps.
+Approved launch code/scratch/inference paths remain control-plane fields only.
+No default permissive host, process proof or native enforcement receipt is created.
+
+`export_launch_bundle(prepared, existing_directory, host=...)` freshly rechecks
+current authority and exclusively creates `<campaign_id>.workers.json`, outside
+model asset roots. WorkerLaunchHandoff/v1 contains bundle, canonical bundle digest,
+campaign activation receipt and joined preparation receipt. No originals/locks/
+trial outcomes are overwritten and unknown liability is preserved. Handoff size
+is bounded to 16 MB before persistence.
+
+`load_launch_bundle(path)` rejects traversal/reparse/symlink/hardlink aliases and
+bounds the read. `parse_launch_bundle(bytes)` uses D4 strict duplicate-key/
+nonfinite JSON parsing and strict typed models, accepts raw WorkerLaunchBundle/v1
+or WorkerLaunchHandoff/v1, verifies every receipt/membership/expiry commitment,
+and returns only an UNAUTHENTICATED bundle. Reading a prior preparation receipt
+never reconstructs authority: D7 must freshly call prepare_launch_bundle with its
+real host, then validate_campaign_edition and recheck custody/isolation before
+opening/dispatch. No file read launches a worker or opens a held-out edition.
+
+Future joined CLI (do not run in Dirty Mode):
+
+```text
+python scripts/train.py campaign --launch-bundle BUNDLE --validate-only
+python scripts/train.py campaign --launch-bundle BUNDLE --validate-only --check-files
+python scripts/train.py campaign --launch-bundle BUNDLE --activate --out EXISTING_HANDOFF_DIR
+```
+
+The earlier `--spec` control-plane path remains distinct; exactly one input is
+required. Both forms fail explicitly with unavailable/authenticated_campaign_host_required
+when explicit activation has no real host. Only a reviewed operator injects the
+host in code. Joined activation writes a qualified handoff; it does not run D7,
+consume held-out open, start a worker/model/provider, read gold or claim success.
+Failed/cancelled training retains existing accounting recovery and cannot produce
+a selected completed checkpoint through this join.
+
+Artifact-root equality is enforced only for the bootstrap's ACTIVE arm. Fine
+retains genuine inactive base metadata with its separate pinned root for canonical
+pure parity checks; it does not become another executable arm or acquire base
+filesystem rights. WorkerService selects only registry[bootstrap.pin.arm]. All
+permit/config/profile/bootstrap/member/full-L checks remain required, and native
+enforcement must deny unapproved paths. Never rewrite locked config roots to make
+equality pass. All joined parsing/handoff/loader/worker/native/cost behavior remains
+unexecuted and runtime-unverified.
+
+As-built D7 consumer reconciliation: m7.experiment.campaign.validate_campaign_inputs
+loads this exact WorkerLaunchBundle; execute_isolated_campaign calls
+prepare_launch_bundle and consumes prepared.bundle.campaign,
+prepared.receipt.profile_sha256 and descriptors() rows with arm/bootstrap/policy/
+membership. m7.experiment.isolated.WorkerDefinition and validate_definitions use
+the same D6 profile/launch/bootstrap types. No second producer JSON wire is needed.
+D7's scripts/eval.py campaign mode imports load_launch_bundle, validates by default,
+and only imports the explicitly supplied trusted operator host for execution.
+
+```text
+python scripts/eval.py --launch-bundle HANDOFF --lock EDITION --authorization AUTH --validate-only
+```
+
+Future --execute-campaign additionally requires the reviewed IsolatedCampaignHost,
+separate inference/gold export paths+commitments, custody lifecycle, journal and
+artifact destination. Those custody/gold paths stay in D7's parent-side operator
+arguments; they are not added to D5's bundle or child wire. D7 retains nonconsuming
+release qualification before channels, once-only open, current cost/isolation,
+owned worker cleanup and safe artifact publication. Its --run-timing path is
+explicitly blocked without the separately approved isolated timing phase; cached
+worker predictions are never substituted for fresh timing.
+
+The joined parser also checks all exported point-in-time receipt identities,
+selected/lock/resource/budget/profile/member/launch/bootstrap digests and chronology.
+A structurally valid historical receipt still grants no current authority. D6's
+actual InitCommand/encode_line is used for the bootstrap byte bound, including
+command framing/newline overhead rather than a bootstrap-only estimate.

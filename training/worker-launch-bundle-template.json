@@ -1,0 +1,8 @@
+{
+  "schema_version": "WorkerLaunchBundle/v1",
+  "campaign": null,
+  "campaign_sha256": null,
+  "profile_sha256": null,
+  "bootstraps": {},
+  "memberships": {}
+}

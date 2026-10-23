@@ -7,6 +7,7 @@ from pydantic import Field, model_validator
 
 from m7.contracts import Boundary, Digest, Identifier
 from m7.providers.contracts import AttemptPolicy, ExecutionPermit, FrontierConfig, LocalModelConfig
+from m7.providers.worker_profile import WorkerLaunchPolicy, WorkerProfile
 from .selection_models import NumericalTargets, PreTestSelectionLock
 from .validation import ARTIFACTS, digest, utc
 
@@ -111,6 +112,8 @@ class CampaignSpec(Boundary):
     regex_configuration_sha256: Digest
     permits: Annotated[tuple[ExecutionPermit, ...], Field(min_length=3, max_length=3)]
     policies: dict[str, AttemptPolicy]
+    worker_profile: WorkerProfile
+    launch_policies: dict[str, WorkerLaunchPolicy]
     resources: CampaignResources
     budget: CampaignBudget
     issued_at: str
@@ -119,7 +122,10 @@ class CampaignSpec(Boundary):
 
     @model_validator(mode="after")
     def all_required(self):
-        if set(self.policies) != {"base", "finetuned", "frontier"} or utc(self.expires_at) <= utc(self.issued_at):
+        if (set(self.policies) != {"base", "finetuned", "frontier"} or
+                set(self.launch_policies) != {"regex", "base", "finetuned", "frontier"} or
+                set(self.worker_profile.members) != set(self.launch_policies) or
+                utc(self.expires_at) <= utc(self.issued_at)):
             raise ValueError("incomplete_campaign_specification")
         return self
 
@@ -138,6 +144,8 @@ class CampaignActivationReceipt(Boundary):
     selection_lock_sha256: Digest
     isolation_capability_sha256: Digest
     isolation_request_sha256: Digest
+    worker_profile_sha256: Digest
+    launch_policy_sha256_by_arm: dict[str, Digest]
     resources_sha256: Digest
     budget_sha256: Digest
     prepared_at: str

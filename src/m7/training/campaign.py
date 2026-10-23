@@ -9,7 +9,8 @@ from urllib.parse import urlsplit
 
 from m7.providers.contracts import LocalModelConfig, config_digest, verify_artifacts
 from m7.providers.parity import validate_pair
-from .artifacts import no_links, tree_sha256
+from m7.providers.worker_profile import validate_worker_membership, worker_profile_digest
+from .artifacts import file_sha256, no_links, tree_sha256
 from .campaign_models import CampaignActivationReceipt, CampaignSpec, SelectedArtifactManifest
 from .checkpoints import verify_parity
 from .executor import _write_json
@@ -151,6 +152,27 @@ def validate_campaign(spec: CampaignSpec, *, check_files: bool = False,
         raise ValueError("overlapping_inference_artifact_roots")
     if check_files and tree_sha256(roots[1]) != selected.exported_artifact_tree_sha256:
         raise ValueError("selected_export_artifact_tree_mismatch")
+    profile_hash = worker_profile_digest(spec.worker_profile)
+    if profile_hash != resources.worker_policy_sha256:
+        raise ValueError("campaign_shared_worker_profile_mismatch")
+    for arm, launch in spec.launch_policies.items():
+        membership = validate_worker_membership(spec.worker_profile, launch)
+        if (launch.arm != arm or launch.edition_id != spec.edition_id or
+                launch.corpus_manifest_sha256 != spec.corpus_manifest_sha256 or
+                launch.filesystem_policy_sha256 != resources.filesystem_policy_sha256 or
+                membership.profile_sha256 != profile_hash):
+            raise ValueError("campaign_exact_worker_launch_binding_mismatch")
+        if arm in ("base", "finetuned") and launch.artifact_root != getattr(selected, arm).artifact_root:
+            raise ValueError("campaign_launch_artifact_root_mismatch")
+        for raw in (launch.executable, launch.entrypoint, launch.working_directory):
+            if not Path(raw).is_absolute() or ".." in Path(raw).parts:
+                raise ValueError("campaign_worker_absolute_path_required")
+        if check_files:
+            from m7.data.filesystem import checked_path
+            executable, entrypoint = checked_path(launch.executable), checked_path(launch.entrypoint)
+            checked_path(launch.working_directory)
+            if file_sha256(executable) != launch.executable_sha256 or file_sha256(entrypoint) != launch.entrypoint_sha256:
+                raise ValueError("campaign_worker_code_pin_mismatch")
     endpoint = urlsplit(spec.frontier.endpoint)
     if (endpoint.scheme != "https" or not endpoint.netloc or endpoint.username or endpoint.password or
             endpoint.query or endpoint.fragment):
@@ -261,6 +283,14 @@ def prepare_campaign(spec: CampaignSpec, *, host: CampaignHost,
     for policy in spec.policies.values():
         authenticate(host.verify_receipt, "attempt_policy", digest(policy.model_dump(mode="json")))
         authenticate(host.verify_receipt, "rate_quote", policy.rate_receipt_sha256)
+    authenticate(host.verify_receipt, "worker_profile_approval", worker_profile_digest(spec.worker_profile))
+    launch_hashes = {}
+    for arm, policy in spec.launch_policies.items():
+        membership = validate_worker_membership(spec.worker_profile, policy)
+        launch_hashes[arm] = membership.launch_sha256
+        authenticate(host.verify_receipt, "worker_launch_approval", membership.launch_sha256)
+        authenticate(host.verify_receipt, "worker_application_manifest", policy.application_manifest_sha256)
+        authenticate(host.verify_receipt, "worker_runtime_environment", policy.runtime_environment_sha256)
     if host.isolation_guard.sha256 != resources.isolation_capability_sha256:
         raise ValueError("campaign_isolation_capability_mismatch")
     isolation = host.isolation_guard.require_current(spec.edition_id, spec.corpus_manifest_sha256,
@@ -270,6 +300,7 @@ def prepare_campaign(spec: CampaignSpec, *, host: CampaignHost,
         run_id=spec.run_id, campaign_sha256=spec.sha256, selected_artifacts_sha256=selected.sha256,
         selection_lock_sha256=spec.selection_lock.sha256,
         isolation_capability_sha256=isolation.capability_sha256, isolation_request_sha256=isolation.request_sha256,
+        worker_profile_sha256=worker_profile_digest(spec.worker_profile), launch_policy_sha256_by_arm=launch_hashes,
         resources_sha256=digest(resources.model_dump(mode="json")),
         budget_sha256=digest(spec.budget.model_dump(mode="json")), prepared_at=clock().isoformat(),
         expires_at=spec.expires_at)

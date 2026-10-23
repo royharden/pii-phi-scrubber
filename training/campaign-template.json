@@ -18,6 +18,8 @@
   "regex_configuration_sha256": null,
   "permits": [],
   "policies": {},
+  "worker_profile": null,
+  "launch_policies": {},
   "resources": {
     "schema_version": "CampaignResources/v1",
     "local_license_packet_sha256": null,

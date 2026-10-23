@@ -23,6 +23,11 @@ from .campaign import (
     CampaignHost, CampaignProducer, PreparedCampaign, SelectedCampaignProducer, build_selected_artifacts,
     campaign_arm_pins, export_prepared_campaign, prepare_campaign, validate_campaign,
 )
+from .launch_bundle import (
+    LaunchBundlePreparationReceipt, PreparedLaunchBundle, WorkerLaunchBundle, WorkerLaunchDescriptor,
+    WorkerLaunchHandoff, build_worker_launch_bundle, d7_worker_definitions, export_launch_bundle, load_launch_bundle,
+    parse_launch_bundle, prepare_launch_bundle, validate_campaign_edition, validate_launch_bundle,
+)
 
 __all__ = ["EngineResult", "TrainingCancelled", "TrainingEngine", "TrainingOOM", "TrialContext",
            "execute_training", "validate_training_plan", "validate_training_receipt", "prepare_training_dataset",
@@ -34,4 +39,8 @@ __all__ = ["EngineResult", "TrainingCancelled", "TrainingEngine", "TrainingOOM",
            "CampaignActivationReceipt", "CampaignAllocation", "CampaignBudget", "CampaignResources",
            "CampaignSpec", "SelectedArtifactManifest", "CampaignHost", "CampaignProducer", "PreparedCampaign",
            "SelectedCampaignProducer", "build_selected_artifacts", "campaign_arm_pins",
-           "export_prepared_campaign", "prepare_campaign", "validate_campaign"]
+           "export_prepared_campaign", "prepare_campaign", "validate_campaign",
+           "LaunchBundlePreparationReceipt", "PreparedLaunchBundle", "WorkerLaunchBundle", "WorkerLaunchDescriptor",
+           "WorkerLaunchHandoff", "build_worker_launch_bundle", "export_launch_bundle", "load_launch_bundle",
+           "parse_launch_bundle", "prepare_launch_bundle", "validate_launch_bundle", "d7_worker_definitions",
+           "validate_campaign_edition"]

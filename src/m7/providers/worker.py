@@ -396,7 +396,8 @@ def validate_worker_spec(bootstrap: WorkerBootstrap, policy: WorkerLaunchPolicy,
             or bootstrap.limits.lifetime_seconds != policy.lifetime_seconds):
         raise AdapterFault("permit_required")
     for arm, config in bootstrap.configs.items():
-        if isinstance(config, LocalModelConfig) and config.artifact_root != policy.artifact_root:
+        if (arm == bootstrap.pin.arm and isinstance(config, LocalModelConfig)
+                and config.artifact_root != policy.artifact_root):
             raise AdapterFault("permit_required")
         bootstrap.permits[arm].check(run_id=bootstrap.run_id, model_id=config.model_id,
             scope="frontier_inference" if arm == "frontier" else "local_inference",
