@@ -70,8 +70,8 @@ published. This check supplements ancestry; it cannot establish independence.
 | `seal_corpus(inventory, plan, assignments, authorization)` | Future custodian; checks edition/inventory/plan pins, expiry and role separation before generation |
 | `verify_bundle(bundle)` | Evaluator; channel commitments, IDs, spans, counts, provenance joins and audit consistency |
 | `inference_records(bundle, split='test')` | Custodian/evaluator selects intended split; detector-safe record tuple only |
-| `storage.write_bundle(bundle, destination, private_root=...)` | Custodian; new directory, separate JSON channels, manifest completion marker last |
-| `storage.read_bundle(directory)` | Custodian/evaluator only; bounded read, strict schema and commitment verification |
+| `storage.write_bundle(bundle, destination, private_root=..., filesystem=...)` | Custodian; claimed filesystem required for sealed bundles; new directory, manifest completion marker last |
+| `storage.read_bundle(directory, filesystem=...)` | Custodian/evaluator only; sealed bundles require claimed filesystem; bounded strict reads and commitments |
 
 The manifest pins canonical SHA256 commitments of records, gold, provenance,
 assignments, plan, inventory and mechanical audit, plus raw guide/generator-source
@@ -91,7 +91,7 @@ The caller pins current guide/generator hashes
 and selection-rule hash in `CorpusPlan/v1`; no populated approval template or fake
 corpus receipt is supplied. The tool rejects changed source/guide pins.
 
-The future host entrypoint `tools/data/seal.main(verify_receipt=trusted_verifier)`
+The future host entrypoint `tools/data/seal.main(verify_receipt=trusted_verifier, filesystem=claimed_filesystem)`
 accepts these CLI arguments (the standalone command refuses mutation without a
 trusted verifier): `--inventory <private.json> --plan <plan.json>
 --authorization <authorization.json> --approval-receipt <approved-original>
@@ -124,7 +124,8 @@ and never authorizes a model, provider, training job or held-out experiment by i
 
 ## Guarded lifecycle
 
-`CustodyLifecycle(root, verify_receipt=trusted_verifier)` uses an existing private
+`CustodyLifecycle(root, verify_receipt=trusted_verifier, filesystem=claimed_filesystem,
+isolation_guard=actual_guard)` uses an existing private
 root and an append-only, hash-chained numbered event store. All mutations use an
 exclusive-created writer lock, and fsync event bytes. No root, event, lock or corpus
 was created by executing these sources during construction. A crash/partial event
@@ -149,8 +150,9 @@ rewrites by an OS user with custody rights; protect and back up the root externa
    receipt digest to this edition, corpus manifest, frozen selection rule and lock
    time. The trusted host verifies D5's actual selection/parity/target-lock schema;
    D4 does not duplicate D5's selection algorithm or accept a shaped JSON as proof.
-   `ReleaseAuthorization` additionally binds run, experiment-plan hash, exact
-   population, audit and expiry. Only one release is allowed per edition.
+   `ReleaseAuthorization/v2` additionally binds run, experiment-plan hash, exact
+   population, audit, actual isolation capability and expiry. Only one release is
+   allowed per edition. `CustodyRelease/v2` pins filesystem/worker-policy digests.
 4. `authorize_open(edition, resume)` binds D7's `LockedEdition` fingerprint, run,
    population, plan, release, audit, selection lock and expiry. First open is durable
    exactly once. Resume is allowed only with the same fingerprint and an already
@@ -200,7 +202,7 @@ adapter execution and its own begin/terminal journal; D4 never touches those pat
 `released_channels(lifecycle, edition, bundle, authority=...)` authenticates release
 before calling D7's canonical `channels_from_bundle`; it does not consume the
 execution open. Return value is `(inference_records, evaluator_CustodyGold)`.
-`write_released_channels` can later materialize these into new directories under
+`write_released_channels(..., filesystem=claimed_filesystem)` can later materialize these into new directories under
 separate, preprovisioned, disjoint worker/evaluator roots. Worker files contain only
 opaque LogRecords and their channel manifest, never gold/provenance/block/slice.
 Evaluator gold includes D7's block/slice fields privately. Separate roots/paths are
@@ -221,3 +223,89 @@ No CLI prints source examples, lexicons, label rows, normalized strings or raw
 exception/validation bodies. Independent custody/audit and all actual runtime,
 crash recovery, ACL/isolation, sealing/generation and executor validation remain
 deferred until authorized outside Dirty Mode.
+
+## Filesystem and actual-enforcement capabilities
+
+`CustodyPathPolicy/v1` names four existing, local, disjoint roots: private raw
+corpus/journal, inference-only exports, evaluator-only gold exports and train/dev
+artifacts. `CustodyFilesystem(policy, approval, verify_receipt=...)` authenticates a
+current `FilesystemPolicyApproval` for the exact policy/custodian. Its explicit
+future `claim_roots()` requires empty preprovisioned roots and writes exclusive
+policy markers. A marker is an API ownership commitment, never an ACL or sandbox.
+No roots, markers or permissions were created/changed during construction.
+
+`checked_path` rejects relative custody paths, `.`/`..` traversal, network/UNC paths,
+symlinks, junctions/reparse points and multiply-linked files before trusting a
+resolved path. Each operation checks its root/role and markers. Private storage
+and journal mutations now require the authenticated filesystem; raw bundles cannot
+be loaded through the sealed-bundle reader without it. Roots must be provisioned
+outside cloud/reparse-backed paths. Native OS enforcement must address races,
+mapped drives and access by other processes; these Python checks cannot do so.
+
+Training/worker/evaluator exports are new directories with strict allowed channel
+filenames and typed manifests. Worker records are strict LogRecords with the
+opaque inference split; no gold field or unexpected manifest field is accepted.
+Evaluator gold uses D7's canonical CustodyGold schema. `commitment.json` pins every
+file's bytes, role, directory and policy. `verify_export(role,directory,expected_sha)`
+checks the exact file set/paths/bytes against the externally pinned commitment;
+directory names alone are never trusted. Renewed filesystem approvals require the
+same policy plus authentication of an old marker's original approval scope.
+
+`IsolationCapability/v1` pins edition, corpus manifest, filesystem policy, worker
+policy, actual enforcement-evidence digest, native platform/mechanism, issuer and
+validity interval. `IsolationRequest/v1` is the exact requested binding.
+`IsolationVerifier.verify(capability,request)->bool` is the host's Protocol for
+verifying actual native process/principal/filesystem enforcement. The implementation
+supplies NO pretend verifier or default true. `require_isolation(...)` checks both
+authenticated capability and enforcement receipts, native platform, expiry,
+revocation and actual verifier result. Missing/unknown proof fails closed.
+
+`IsolationGuard(capability,request,verify_receipt=...,platform_verifier=...)`
+rechecks that proof on every activation. D6/D7 must bind the same exact worker-policy
+digest, including approved worker/artifact/export inputs. A subprocess, sanitized
+environment, private directory or approval-shaped JSON is not actual isolation.
+The operating host must supply enforcement and the verifier before held-out use.
+This source does not grant rights or launch an isolation process.
+
+`CustodyLifecycle(...,filesystem=...,isolation_guard=...)` requires the guard before
+release and on every open/resume/channel export. `CustodyReleaseAuthorization/v2`
+authenticates the capability digest; `CustodyRelease/v2` retains capability,
+filesystem and worker-policy commitments. D7 still binds the release digest in its
+LockedEdition and uses the supplied lifecycle evaluation gate; D6 must check guard
+request against its exact worker session policy. Old unisolated v1 receipts cannot
+be treated as v2. No actual v1/v2 custody store or release was created in this run.
+
+## Nonauthoring audit handoff
+
+`build_audit_handoff(inventory,plan,assignments,custodian_id=...,
+implementation_author_ids=...,bundle=None)` returns `AuditHandoff/v1`: guide,
+generator, inventory, ancestry, assignments, plan/selection-rule and optional corpus
+commitments; effective component and normal/challenge/class/benign counts;
+taxonomy/adjudication totals and unresolved issue codes. It exports no family IDs,
+lexicons, templates, raw examples, gold offsets or source paths. With no supplied
+corpus, population counts are null and `population_status='not_supplied'`; no
+measurements are invented. Both independent verdicts remain literal `pending`.
+
+A separately appointed reviewer receives that immutable packet plus custodian-
+controlled access to the actual source/sample via the operating host. The packet
+alone cannot perform a semantic audit. Only an externally supplied authenticated
+`IndependentAuditVerdict/v1` can be consumed by `verify_independent_audit`: it binds
+packet, edition, scope, evidence, reviewer and expiry, excludes implementation and
+family authors/the custodian, and rejects unresolved or rejected scopes. The
+original packet stays pending and immutable; its implementation never signs or
+manufactures a nonauthoring verdict.
+
+The final D5 schema is consumed through `release_from_training_lock(...)`, which
+calls D5's canonical `verify_pre_test_lock` and `selection_lock_reference`. Release
+checks the experiment-plan/edition and cannot outlive either the lock or native
+capability. D4 does not reinterpret development scores or recreate lock receipts.
+
+Future host `tools/data/custody.main(filesystem=claimed_filesystem)` adds
+`audit-handoff --inventory <private> --plan <private> --assignments <private>
+--custodian-id <id> --implementation-author <id> [--bundle-directory <private>]`.
+It prints only that value-free packet. Private inventory/bundle inspection requires
+the same authenticated filesystem. `capability --capability <file> --request <file>`
+prints digests with `platform_enforcement_verified=false` and
+`status='shape_only_not_authorized'`; it never claims native enforcement. The split
+audit's future host entrypoint likewise accepts `filesystem=...` for sealed data.
+Read-only store inspection verifies path/chain shape but issues no authorization.

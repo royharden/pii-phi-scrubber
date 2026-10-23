@@ -12,6 +12,9 @@ from .lifecycle_models import (
     RevokeReceipt, SealReceipt, SelectionLockReference, SupersedeReceipt, TrainingExportAuthorization,
 )
 from .exports import TrainingChannels, released_channels, training_channels, write_released_channels, write_training_channels
+from .access import IsolationCapability, IsolationGuard, IsolationRequest, IsolationVerifier, VerifiedIsolation, require_isolation
+from .filesystem import CustodyFilesystem, CustodyPathPolicy, ExportCommitment, FilesystemPolicyApproval, checked_path
+from .audit_handoff import AuditHandoff, IndependentAuditVerdict, build_audit_handoff, verify_independent_audit
 
 __all__ = [
     'Ancestor', 'BlockAssignment', 'CorpusBundle', 'CorpusManifest', 'CorpusPlan', 'Family',
@@ -23,4 +26,8 @@ __all__ = [
     'FreezeReceipt', 'OpenReceipt', 'ReleaseAuthorization', 'RevokeReceipt', 'SealReceipt',
     'SelectionLockReference', 'SupersedeReceipt', 'TrainingExportAuthorization', 'TrainingChannels',
     'released_channels', 'training_channels', 'write_released_channels', 'write_training_channels',
+    'IsolationCapability', 'IsolationGuard', 'IsolationRequest', 'IsolationVerifier', 'VerifiedIsolation',
+    'require_isolation', 'CustodyFilesystem', 'CustodyPathPolicy', 'ExportCommitment',
+    'FilesystemPolicyApproval', 'checked_path', 'AuditHandoff', 'IndependentAuditVerdict',
+    'build_audit_handoff', 'verify_independent_audit',
 ]

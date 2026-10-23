@@ -14,6 +14,8 @@ from .lifecycle_models import (
 )
 from .models import BlockAssignment, CorpusBundle, CorpusPlan, FamilyInventory, SealAuthorization
 from .provenance import audit_inventory, commitment
+from .access import IsolationGuard
+from .filesystem import CustodyFilesystem
 
 
 def utc(value: str) -> datetime:
@@ -154,8 +156,11 @@ class CustodyLifecycle:
     No permissive callback/default is provided. This journal is not that store.
     """
     def __init__(self, root: Path, *, verify_receipt: Callable[[str, str], bool],
-                 clock: Callable[[], datetime] | None = None):
-        self.journal = CustodyJournal(root)
+                 clock: Callable[[], datetime] | None = None,
+                 filesystem: CustodyFilesystem | None = None,
+                 isolation_guard: IsolationGuard | None = None):
+        self.journal = CustodyJournal(root, filesystem=filesystem)
+        self.filesystem, self.isolation_guard = filesystem, isolation_guard
         self.verifier = verify_receipt
         self.clock = clock or (lambda: datetime.now(timezone.utc))
 
@@ -272,12 +277,15 @@ class CustodyLifecycle:
                 raise ValueError('sealed_edition_required')
             state.require_active()
             seal, freeze = state.seal, state.freeze
+            isolation = self._isolation(edition_id, seal.corpus_manifest_sha256)
             self._current(authorization.issued_at, authorization.expires_at)
             if (authorization.edition_id != edition_id or authorization.custodian_id != freeze.custodian_id
                     or authorization.corpus_manifest_sha256 != seal.corpus_manifest_sha256
                     or authorization.population_sha256 != seal.population_sha256
                     or authorization.selection_lock_sha256 != selection_lock.receipt_sha256
                     or authorization.independent_audit_sha256 != seal.independent_audit_sha256
+                    or authorization.isolation_capability_sha256 != isolation.capability_sha256
+                    or utc(authorization.expires_at) > utc(self.isolation_guard.capability.expires_at)
                     or selection_lock.edition_id != edition_id
                     or selection_lock.corpus_manifest_sha256 != seal.corpus_manifest_sha256
                     or selection_lock.selection_rule_sha256 != freeze.selection_rule_sha256
@@ -297,14 +305,42 @@ class CustodyLifecycle:
                 selection_lock_sha256=selection_lock.receipt_sha256,
                 selection_lock_reference_sha256=commitment(selection_lock),
                 independent_audit_sha256=seal.independent_audit_sha256, authorization_sha256=commitment(authorization),
+                isolation_capability_sha256=isolation.capability_sha256,
+                filesystem_policy_sha256=isolation.filesystem_policy_sha256,
+                worker_policy_sha256=isolation.worker_policy_sha256,
                 custodian_id=freeze.custodian_id, released_at=self._now(), expires_at=authorization.expires_at)
             return self._commit(receipt, events)
+
+    def release_from_training_lock(self, lock, *, selection: dict, parity: dict,
+                                    justification: dict, approval,
+                                    authorization: ReleaseAuthorization) -> CustodyRelease:
+        """Use D5's canonical verification/projection, never duplicate selection logic."""
+        from m7.training.locking import selection_lock_reference, verify_pre_test_lock
+        verify_pre_test_lock(lock, selection=selection, parity=parity, justification=justification,
+                             approval=approval, verify_receipt=self.verifier, clock=self.clock)
+        if (authorization.edition_id != lock.edition_id
+                or authorization.experiment_plan_sha256 != lock.experiment_plan_sha256
+                or utc(authorization.expires_at) > utc(lock.expires_at)):
+            raise ValueError('training_lock_release_binding_mismatch')
+        return self.release(lock.edition_id, selection_lock=selection_lock_reference(lock),
+                            authorization=authorization)
+
+    def _isolation(self, edition_id: str, manifest_sha256: str):
+        if self.isolation_guard is None or self.filesystem is None:
+            raise ValueError('authenticated_actual_isolation_required')
+        return self.isolation_guard.require_current(edition_id, manifest_sha256,
+            filesystem_policy_sha256=self.filesystem.sha256)
 
     def _release_current(self, state: _State) -> CustodyRelease:
         state.require_active()
         release = state.release
         if release is None or utc(release.expires_at) <= utc(self._now()):
             raise ValueError('current_custody_release_required')
+        isolation = self._isolation(release.edition_id, release.corpus_manifest_sha256)
+        if (isolation.capability_sha256 != release.isolation_capability_sha256
+                or isolation.filesystem_policy_sha256 != release.filesystem_policy_sha256
+                or isolation.worker_policy_sha256 != release.worker_policy_sha256):
+            raise ValueError('release_isolation_binding_mismatch')
         for kind, digest in (
             ('custody_release_authorization', release.authorization_sha256),
             ('pre_test_selection_lock', release.selection_lock_sha256),
@@ -415,19 +451,18 @@ class CustodyLifecycle:
                                                superseded_at=self._now()), events)
 
     def inspect(self) -> dict:
-        """Safe locked snapshot: no family names, gold spans, source or lexicons."""
-        with self.journal.writer():
-            events = self.journal.events()
-            states = _states(events)
-            rows = []
-            for identity, state in sorted(states.items()):
-                phase = ('superseded' if state.superseded else 'revoked' if state.revoked else
-                         'opened' if state.opened else 'released' if state.release else
-                         'sealed' if state.seal else 'frozen')
-                rows.append({'edition_id': identity, 'phase': phase,
-                             'freeze_sha256': commitment(state.freeze),
-                             'seal_sha256': commitment(state.seal) if state.seal else None,
-                             'release_sha256': commitment(state.release) if state.release else None,
-                             'intended_test_records': state.seal.intended_test_records if state.seal else None})
-            return {'schema_version': 'CustodyInspection/v1', 'event_count': len(events), 'editions': rows,
-                    'independent_verdict_issued': False}
+        """Read-only mechanical snapshot; concurrent partial append fails closed."""
+        events = self.journal.events()
+        states = _states(events)
+        rows = []
+        for identity, state in sorted(states.items()):
+            phase = ('superseded' if state.superseded else 'revoked' if state.revoked else
+                     'opened' if state.opened else 'released' if state.release else
+                     'sealed' if state.seal else 'frozen')
+            rows.append({'edition_id': identity, 'phase': phase,
+                         'freeze_sha256': commitment(state.freeze),
+                         'seal_sha256': commitment(state.seal) if state.seal else None,
+                         'release_sha256': commitment(state.release) if state.release else None,
+                         'intended_test_records': state.seal.intended_test_records if state.seal else None})
+        return {'schema_version': 'CustodyInspection/v1', 'event_count': len(events), 'editions': rows,
+                'independent_verdict_issued': False}

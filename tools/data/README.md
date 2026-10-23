@@ -7,3 +7,9 @@ matching frozen lifecycle. `custody.py` provides value-free inventory/bundle/sto
 inspection and source-pin summaries. None has been executed in Dirty Mode. They use only local source/files and do
 not install, download or call models. The shipped development inventory is not a
 held-out corpus. Read `docs/data-custody.md` before using any command.
+
+Sealed entrypoints also require authenticated `CustodyFilesystem` root claims;
+actual held-out release requires an `IsolationGuard` whose supplied native verifier
+confirms real enforcement. No native enforcer, OS rights or capability is fabricated.
+`custody.py audit-handoff` is a future host-only value-free reviewer packet; its
+verdicts stay pending. `custody.py capability` reports shape-only/not-authorized.

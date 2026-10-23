@@ -66,7 +66,7 @@ class SelectionLockReference(Boundary):
 
 
 class ReleaseAuthorization(Boundary):
-    schema_version: Literal['CustodyReleaseAuthorization/v1'] = 'CustodyReleaseAuthorization/v1'
+    schema_version: Literal['CustodyReleaseAuthorization/v2'] = 'CustodyReleaseAuthorization/v2'
     authorization_id: Identifier
     edition_id: Identifier
     run_id: Identifier
@@ -75,6 +75,7 @@ class ReleaseAuthorization(Boundary):
     population_sha256: Digest
     selection_lock_sha256: Digest
     independent_audit_sha256: Digest
+    isolation_capability_sha256: Digest
     custodian_id: Identifier
     issued_at: str
     expires_at: str
@@ -82,7 +83,7 @@ class ReleaseAuthorization(Boundary):
 
 
 class CustodyRelease(Boundary):
-    schema_version: Literal['CustodyRelease/v1'] = 'CustodyRelease/v1'
+    schema_version: Literal['CustodyRelease/v2'] = 'CustodyRelease/v2'
     edition_id: Identifier
     run_id: Identifier
     experiment_plan_sha256: Digest
@@ -94,6 +95,9 @@ class CustodyRelease(Boundary):
     selection_lock_reference_sha256: Digest
     independent_audit_sha256: Digest
     authorization_sha256: Digest
+    isolation_capability_sha256: Digest
+    filesystem_policy_sha256: Digest
+    worker_policy_sha256: Digest
     custodian_id: Identifier
     released_at: str
     expires_at: str

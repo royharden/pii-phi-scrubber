@@ -52,21 +52,22 @@ def inspect_manifest(manifest: dict) -> dict:
             "independent_audit": "pending", "label_audit": "pending", "custody_accepted": False}
 
 
-def main():
+def main(*, filesystem=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--bundle-dir", type=Path)
     parser.add_argument("--inventory", type=Path)
     parser.add_argument("--plan", type=Path)
     args = parser.parse_args()
-    manifest = load_json(args.manifest)
+    manifest_path = filesystem.require_path('private', args.manifest) if filesystem else args.manifest
+    manifest = load_json(manifest_path)
     if manifest.get('schema_version') == 'CorpusManifest/v1':
         if args.bundle_dir is None or args.inventory is None or args.plan is None:
             raise ValueError('full_custody_audit_inputs_required')
-        declared = CorpusManifest.model_validate_json(args.manifest.read_bytes())
-        bundle = read_bundle(args.bundle_dir)
-        inventory = FamilyInventory.model_validate_json(args.inventory.read_bytes())
-        plan = CorpusPlan.model_validate_json(args.plan.read_bytes())
+        declared = CorpusManifest.model_validate_json(filesystem.read_private(manifest_path) if filesystem else manifest_path.read_bytes())
+        bundle = read_bundle(args.bundle_dir, filesystem=filesystem)
+        inventory = FamilyInventory.model_validate_json(filesystem.read_private(args.inventory))
+        plan = CorpusPlan.model_validate_json(filesystem.read_private(args.plan))
         if (bundle.manifest != declared or commitment(inventory) != declared.inventory_sha256
                 or commitment(plan) != declared.plan_sha256):
             raise ValueError('audit_input_commitment_mismatch')

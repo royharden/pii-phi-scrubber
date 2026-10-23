@@ -11,7 +11,8 @@ from .corpus import inference_records, verify_bundle
 from .lifecycle import CustodyLifecycle, utc
 from .lifecycle_models import TrainingExportAuthorization
 from .models import CorpusBundle, GoldRow
-from .provenance import canonical_bytes, commitment
+from .provenance import commitment
+from .filesystem import CustodyFilesystem
 
 if TYPE_CHECKING:
     from m7.experiment import LockedEdition
@@ -23,13 +24,6 @@ class TrainingChannels(Boundary):
     corpus_manifest_sha256: Digest
     records: tuple[LogRecord, ...]
     gold: tuple[GoldRow, ...]
-
-
-def _new_channel_files(destination: Path, payloads: tuple) -> None:
-    destination.mkdir(parents=False, exist_ok=False)
-    for filename, payload in payloads:
-        with (destination / filename).open('xb') as stream:
-            stream.write(canonical_bytes(payload))
 
 
 def training_channels(bundle: CorpusBundle, *, split: Literal['train', 'dev'],
@@ -69,7 +63,8 @@ def training_channels(bundle: CorpusBundle, *, split: Literal['train', 'dev'],
                             records=records, gold=gold)
 
 
-def write_training_channels(channels: TrainingChannels, destination: Path) -> dict:
+def write_training_channels(channels: TrainingChannels, destination: Path, *,
+                             filesystem: CustodyFilesystem) -> dict:
     """New training directory only; no custody bundle/provenance gets serialized."""
     channels = TrainingChannels.model_validate_json(channels.model_dump_json())
     ids = {r.record_id: r.content_sha256 for r in channels.records}
@@ -85,8 +80,10 @@ def write_training_channels(channels: TrainingChannels, destination: Path) -> di
                'corpus_manifest_sha256': channels.corpus_manifest_sha256,
                'record_count': len(channels.records), 'records_sha256': commitment(channels.records),
                'gold_sha256': commitment(channels.gold)}
-    _new_channel_files(destination, (('records.json', channels.records), ('gold.json', channels.gold), ('manifest.json', receipt)))
-    return receipt
+    result = filesystem.write_export('training', destination,
+        (('records.json', channels.records), ('gold.json', channels.gold), ('manifest.json', receipt)),
+        export_id=destination.name)
+    return {'manifest': receipt, 'export_commitment_sha256': commitment(result)}
 
 
 def released_channels(lifecycle: CustodyLifecycle, edition: LockedEdition, bundle: CorpusBundle,
@@ -106,15 +103,22 @@ def released_channels(lifecycle: CustodyLifecycle, edition: LockedEdition, bundl
 
 def write_released_channels(lifecycle: CustodyLifecycle, edition: LockedEdition, bundle: CorpusBundle,
                             *, authority: Callable, inference_root: Path, evaluator_root: Path,
-                            inference_directory: Path, evaluator_directory: Path) -> dict:
+                            inference_directory: Path, evaluator_directory: Path,
+                            filesystem: CustodyFilesystem) -> dict:
     """Materialize separate private worker/evaluator channels after release checks.
 
     Roots must already exist with operator-provisioned permissions, be disjoint,
     and contain new child directories. This cannot install ACLs or recall bytes
     already delivered when a later revocation arrives.
     """
-    worker_root, gold_root = inference_root.resolve(strict=True), evaluator_root.resolve(strict=True)
-    worker_dir, gold_dir = inference_directory.resolve(), evaluator_directory.resolve()
+    roots = filesystem.roots()
+    from .filesystem import checked_path
+    worker_root, gold_root = checked_path(inference_root), checked_path(evaluator_root)
+    worker_dir = filesystem.require_path('inference', inference_directory, must_exist=False)
+    gold_dir = filesystem.require_path('evaluator', evaluator_directory, must_exist=False)
+    if (worker_root != roots['inference'] or gold_root != roots['evaluator']
+            or lifecycle.filesystem is None or lifecycle.filesystem.sha256 != filesystem.sha256):
+        raise ValueError('export_filesystem_policy_mismatch')
     if (not worker_root.is_dir() or not gold_root.is_dir()
             or worker_root == gold_root or worker_root.is_relative_to(gold_root) or gold_root.is_relative_to(worker_root)
             or worker_dir == worker_root or gold_dir == gold_root
@@ -127,8 +131,11 @@ def write_released_channels(lifecycle: CustodyLifecycle, edition: LockedEdition,
             'record_count': len(records)}
     worker_manifest = {**base, 'channel': 'inference', 'records_sha256': commitment(records)}
     evaluator_manifest = {**base, 'channel': 'evaluator_gold', 'gold_sha256': commitment(gold)}
-    _new_channel_files(worker_dir, (('records.json', records), ('manifest.json', worker_manifest)))
-    _new_channel_files(gold_dir, (('gold.json', gold), ('manifest.json', evaluator_manifest)))
+    worker_receipt = filesystem.write_export('inference', worker_dir,
+        (('records.json', records), ('manifest.json', worker_manifest)), export_id=worker_dir.name)
+    gold_receipt = filesystem.write_export('evaluator', gold_dir,
+        (('gold.json', gold), ('manifest.json', evaluator_manifest)), export_id=gold_dir.name)
     return {'schema_version': 'ReleasedChannelExport/v1', 'edition_id': edition.edition_id,
             'record_count': len(records), 'inference_manifest_sha256': commitment(worker_manifest),
-            'gold_manifest_sha256': commitment(evaluator_manifest)}
+            'gold_manifest_sha256': commitment(evaluator_manifest),
+            'inference_export_sha256': commitment(worker_receipt), 'gold_export_sha256': commitment(gold_receipt)}
