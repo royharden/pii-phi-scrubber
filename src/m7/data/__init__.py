@@ -15,6 +15,10 @@ from .exports import TrainingChannels, released_channels, training_channels, wri
 from .access import IsolationCapability, IsolationGuard, IsolationRequest, IsolationVerifier, VerifiedIsolation, require_isolation
 from .filesystem import CustodyFilesystem, CustodyPathPolicy, ExportCommitment, FilesystemPolicyApproval, checked_path
 from .audit_handoff import AuditHandoff, IndependentAuditVerdict, build_audit_handoff, verify_independent_audit
+from .native_windows import WindowsIsolationVerifier, WindowsWorkerProcessVerifier
+from .native_windows_models import (
+    NativeObservation, NativeQualificationResult, WindowsControlVerifier, WindowsPolicyEvidence, WindowsProcessApproval,
+)
 
 __all__ = [
     'Ancestor', 'BlockAssignment', 'CorpusBundle', 'CorpusManifest', 'CorpusPlan', 'Family',
@@ -30,4 +34,6 @@ __all__ = [
     'require_isolation', 'CustodyFilesystem', 'CustodyPathPolicy', 'ExportCommitment',
     'FilesystemPolicyApproval', 'checked_path', 'AuditHandoff', 'IndependentAuditVerdict',
     'build_audit_handoff', 'verify_independent_audit',
+    'WindowsIsolationVerifier', 'WindowsWorkerProcessVerifier', 'NativeObservation', 'NativeQualificationResult',
+    'WindowsControlVerifier', 'WindowsPolicyEvidence', 'WindowsProcessApproval',
 ]

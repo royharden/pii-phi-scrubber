@@ -48,7 +48,8 @@ class IsolationVerifier(Protocol):
 
         Must check the trusted host's evidence/profile, principals and allowed
         artifacts. Returning true for directory names or subprocess existence is
-        invalid. This package supplies NO implementation that claims enforcement.
+        invalid. Optional native Windows qualification still requires actual host
+        control evidence; there is no permissive/default enforcement implementation.
         """
         ...
 

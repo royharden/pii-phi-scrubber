@@ -309,3 +309,10 @@ prints digests with `platform_enforcement_verified=false` and
 `status='shape_only_not_authorized'`; it never claims native enforcement. The split
 audit's future host entrypoint likewise accepts `filesystem=...` for sealed data.
 Read-only store inspection verifies path/chain shape but issues no authorization.
+
+The optional [Windows qualifier](data-native.md) supplies lazy read-only token,
+process and per-object access inspection source. It keeps shared-P prepared-policy
+verification separate from exact-PID/full-L postlaunch qualification. It still
+requires actual current native control evidence and never applies permissions,
+starts a process or treats any-job/handle-count observations as full isolation.
+Its CLI defaults to validation only. No native qualification ran in construction.
