@@ -11,6 +11,9 @@ import os
 from pathlib import Path
 import sys
 
+# -I intentionally omits the script directory from sys.path. Add only the pinned
+# entrypoint's own scripts directory, never cwd/PYTHONPATH/a wire-supplied path.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import emit, guarded
 from pydantic import TypeAdapter
 from m7.contracts import Identifier, LogRecord
@@ -104,6 +107,25 @@ def main():
         # No spec/path flag, module import name or credentials come from its wire.
         from m7.providers.worker_service import serve_worker
         return serve_worker(sys.stdin.buffer, sys.stdout.buffer)
+    if "--validate-native-host" in sys.argv[1:]:
+        from m7.providers.native_launcher import NativeLaunchApproval, validate_native_host_spec
+        from m7.providers.worker_profile import WorkerLaunchPolicy, WorkerProfile
+        from m7.providers.worker_wire import MAX_BOOTSTRAP_BYTES, decode_line
+        native_parser = argparse.ArgumentParser(description="Definition only; no native calls/token handle")
+        native_parser.add_argument("--validate-native-host", action="store_true", required=True)
+        native_parser.add_argument("--context-approval", type=Path, required=True)
+        native_parser.add_argument("--policy", type=Path, required=True)
+        native_parser.add_argument("--profile", type=Path, required=True)
+        native_args = native_parser.parse_args()
+        def boundary(path, schema):
+            with path.open("rb") as source:
+                raw = source.read(MAX_BOOTSTRAP_BYTES + 1)
+            if not raw.endswith(b"\n"):
+                raw += b"\n"
+            return decode_line(raw, schema, limit=MAX_BOOTSTRAP_BYTES)
+        emit(validate_native_host_spec(boundary(native_args.context_approval, NativeLaunchApproval),
+            boundary(native_args.policy, WorkerLaunchPolicy), boundary(native_args.profile, WorkerProfile)))
+        return 0
     if "--validate-worker" in sys.argv[1:]:
         from m7.providers.worker import validate_worker_spec
         from m7.providers.worker_profile import WorkerLaunchPolicy, WorkerProfile

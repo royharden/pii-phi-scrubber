@@ -112,6 +112,8 @@ ledgers and explicit native process/file enforcement dependencies. Pure shared p
 P and exact launch L helpers live in `m7.providers.worker_profile`; D4's guard binds P
 and the exact per-process verifier binds P plus L. A process or directory alone is
 never treated as isolation. `--validate-worker` is definition-only; `--worker` is a
-verified launcher's pipe service, not an independent custody approval. Native launcher,
-actual platform verifier, approved runtime/application receipts and an approved
-frontier source factory remain activation dependencies; no worker was started.
+verified launcher's pipe service, not an independent custody approval. Concrete
+Windows creation and fixed active-only factory source are in `docs/worker-host.md`.
+Real preprovisioned token/control context, actual platform verification, approved
+runtime/application receipts and qualified frontier counter/credential remain
+activation dependencies; no worker was started.

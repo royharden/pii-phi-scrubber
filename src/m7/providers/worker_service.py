@@ -14,7 +14,6 @@ from typing import BinaryIO
 
 from m7.contracts import LogRecord, Prediction
 from m7.detectors.attempts import Ledger
-from m7.detectors.registry import build_registry
 from m7.ledger import BudgetExceeded
 from .worker_wire import (
     AttemptEvent, BrokerReply, Command, ControlCommand, InitCommand, MAX_BOOTSTRAP_BYTES,
@@ -92,16 +91,9 @@ RegistryFactory = Callable[[WorkerBootstrap, Mapping[str, Ledger], Callable[[dic
 
 
 def local_registry(bootstrap: WorkerBootstrap, ledgers, sink, cancelled):
-    """Built-in local/regex worker. Frontier requires a separately approved factory.
-
-    Dependency injection is source-owned, never a module/import path from the wire.
-    A frontier factory must supply approved counter/transport without custody reads.
-    """
-    if bootstrap.pin.arm == "frontier":
-        raise ValueError("approved_frontier_worker_factory_required")
-    return build_registry(bootstrap.configs, bootstrap.permits, run_id=bootstrap.run_id,
-        policies=bootstrap.policies, ledgers=ledgers, diagnostic_sink=sink,
-        cancelled=cancelled, include_regex=bootstrap.pin.arm == "regex", allow_execution=True)
+    """Compatibility name; fixed factory activates exactly ONE qualified arm."""
+    from .worker_factory import FixedWorkerFactory
+    return FixedWorkerFactory()(bootstrap, ledgers, sink, cancelled)
 
 
 def serve_worker(source: BinaryIO, output: BinaryIO, *, registry_factory: RegistryFactory = local_registry) -> int:
@@ -132,7 +124,8 @@ def _serve(source: BinaryIO, output: BinaryIO, factory: RegistryFactory) -> int:
                 raise ValueError("attempt_event_limit")
             events.append(item)
 
-        ledgers = {arm: RemoteLedger(bootstrap, arm, source, output) for arm in bootstrap.policies}
+        active = bootstrap.pin.arm
+        ledgers = {active: RemoteLedger(bootstrap, active, source, output)} if active in bootstrap.policies else {}
         registry = factory(bootstrap, ledgers, sink, lambda: cancelled)
         adapter = registry.get(bootstrap.pin.arm)
         if (adapter is None or not callable(adapter) or not callable(getattr(adapter, "preflight", None))

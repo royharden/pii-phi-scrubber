@@ -69,8 +69,9 @@ PATH/PYTHONPATH, credential, provider or token variables are forwarded.
 must attest the actual process birth/image, P plus full L/bootstrap/member pins,
 approved imported application/runtime manifests, handles, native filesystem/network
 rights and descendant/lifetime policy. PID, directory naming, signatures alone or
-Popen existence do not prove enforcement. A native adapter/verifier is an explicit
-external activation dependency; none is implemented permissively here. `PipedWorker`
+Popen existence do not prove enforcement. WindowsIsolatedLauncher now provides
+concrete creation source; real preprovisioned context and native verification remain
+explicit activation dependencies, with no permissive fallback. `PipedWorker`
 only wraps an owned already-restricted process handle and native owned-job termination;
 it never creates a process or changes OS rights. Code files are hashed before launch;
 approved artifacts/runtime must remain immutable and enforcement must address TOCTOU.
@@ -115,9 +116,11 @@ replay is never a timing sample. D7 owns separate authorized fresh-controller ti
 passes against an approved warmed backend.
 
 CLI `--worker` is the pipe-service entrypoint for the verified native launcher, not
-a standalone custody/isolation certification. The built-in source factory supports
-local/regex; frontier requires a separately approved fixed source factory that injects
-the selected counter/transport/credential boundary. It cannot be selected via an
+a standalone custody/isolation certification. The fixed source factory implements
+active-only regex/local/frontier construction; frontier needs actual trusted-host
+counter/provider/credential qualification. It cannot be selected via an
 arbitrary module/path on the wire. Missing vendor/native dependencies return explicit
 unavailable errors, never fake four-arm results. No worker, model, provider, database,
 native enforcement or CLI journey has been executed during construction.
+See `docs/worker-host.md` for concrete Windows creation, D4 managed context leases
+and the side-effect-free native-host definition CLI.
