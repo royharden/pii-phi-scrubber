@@ -276,3 +276,141 @@ training artifacts now enforce the same safetensors/no-executable-or-pickle file
 boundary as D6, and the final model save explicitly requests safetensors with hub
 publication disabled. CUDA training requires exactly one visible authorized GPU;
 CPU remains separate. These checks are source only and have not been exercised.
+
+## Selected-artifact campaign handoff
+
+The C source closes the producer handoff to D7; it has not exported a real model,
+prepared an actual campaign or enforced OS permissions. Canonical models are
+`m7.training.campaign_models.SelectedArtifactManifest`, `CampaignSpec`,
+`CampaignResources`, `CampaignBudget`, `CampaignAllocation` and
+`CampaignActivationReceipt`. Source functions/protocol live in `m7.training.campaign`.
+Both JSON templates deliberately contain missing hashes/configs/permissions and
+are invalid for activation. Their zero numbers grant no budget or cost claim.
+
+`build_selected_artifacts(...)` consumes actual original training plan/permit,
+completed receipt, training run/recovery closeout, selected dev receipt, checkpoint
+export/parity, lock/targets/justification/approval, exact base/fine D6 configs and
+private training-root parameter. It authenticates and joins these before returning
+SelectedArtifactManifest/v1. It never selects again, downloads, converts weights,
+substitutes a checkpoint or edits original outcomes. Train/dev/config/environment/
+model/tokenizer/license/custody hashes and exact seed/steps/epochs are preserved.
+Original checkpoint TREE hash is separate from exported inference TREE hash and
+D6's SINGLE `model.safetensors` FILE hash. These are not interchangeable pins.
+
+Worker artifact roots must be separate, closed base/fine inference-only bundles,
+disjoint from the training root. Only approved model config/safetensors and
+recognized tokenizer/backbone asset names are allowed; no datasets, raw/gold
+channels, training receipts, arbitrary JSON/scripts, executable Python or pickle
+weights enter the manifest. Missing/incompatible layouts fail without repair.
+D4 `checked_path` rejects lexical traversal, symlink/junction/reparse/hardlink
+aliases before D6's canonical `verify_artifacts` rehashes the closed file manifest.
+Those path checks are not an OS sandbox and cannot defeat hostile TOCTOU changes;
+future artifacts must be immutable under the actual native enforcement profile.
+Rehoming an artifact after dev selection changes its configuration pin and is
+rejected; export/rehome must happen before the final dev evaluation and lock.
+
+`CampaignSpec/v1` embeds only this selected artifact manifest, exact pre-test lock
+and numerical targets, approved frontier config, regex artifact/config pins, three
+D6 adapter permits/AttemptPolicies, resource/terms/custody/evaluation/isolation
+receipt references, intended population commitment/count, D7 adoption-policy and
+timing-plan hashes, and combined budget. It includes NO training-root, custody
+root, dataset directory, gold, provenance, raw log or token/key fields. Local paths
+inside base/fine configs address inference assets only. Frontier endpoints require
+approved credential-free HTTPS without URL credentials, query or fragment.
+The evaluator keeps the full campaign; do not send it to the worker. Give a worker
+only D6's approved config/permit/policy and bounded opaque records.
+
+Campaign resources distinguish the original training license packet from separate
+local-inference license, local hardware, provider license/resource/terms, cash,
+independent audit, custody release and evaluation authorization references.
+Training permission alone does not imply inference/provider/hardware permission.
+Exact run/model/config/policy, scope, cap and expiry must agree with each adapter
+permit. No real account/credential lookup or provider call is implemented here.
+
+Combined cash accounting carries the authenticated original training closeout,
+known training cash and unresolved training liabilities. Three separately named
+inference allocations plus prior known/unknown training liabilities must fit the
+approved campaign cap. Unknown training cost stays charged, not silently zeroed.
+Each allocation funds its declared call ceiling including allowed retries, and
+must cover at least the primary pass plus three timing passes. Actual approved
+warmup/other timing calls also belong in the ceiling; D7 must bind the exact timing
+plan and ensure they fit. This is reservation/authority source, not measured total
+economic cost. D7 adoption still requires combined actual training+inference
+accounting, and honest electricity/amortization/unknown-cost limitations.
+
+### Producer and operator entrypoints
+
+```text
+CampaignProducer.validate(spec, *, check_files=False) -> dict
+CampaignProducer.prepare(spec, *, host=CampaignHost(...)) -> PreparedCampaign
+SelectedCampaignProducer()  # concrete producer, construction has no effects
+validate_campaign(spec, *, check_files=False) -> dict
+prepare_campaign(spec, *, host=...) -> PreparedCampaign
+campaign_arm_pins(spec) -> tuple[D7 ArmPin, ...]
+export_prepared_campaign(prepared, existing_directory, *, host=...) -> dict
+```
+
+Default validation reparses strict schemas, checks commitments, same-base/fine
+parity declarations, expiry, terms/resources and quoted budget. It performs no
+artifact reads, authentication, model loading, DB operation or writes. Its result
+always says activation_allowed=false. `check_files=True` additionally performs
+read-only path/layout/hash checks, never model imports/inference.
+
+CampaignHost requires the actual trusted receipt verifier and D4 IsolationGuard.
+Preparation authenticates current campaign/selected-artifact/training-closeout/
+checkpoint/lock/targets/parity/approval, licensing/hardware/provider/cash,
+custody/evaluation/audit/adoption/timing, adapter permit/policy/rate references.
+It binds the exact filesystem-policy/worker-policy/capability digests and calls
+IsolationGuard.require_current, including the actual platform verifier. There is
+no implementation that claims subprocesses or directory names enforce isolation.
+Absent/revoked/mismatched enforcement fails closed. Preparation returns a fresh
+value-free receipt with runtime_executed=false and does not spawn a worker, open
+an edition, invoke a model or run evaluation. It is a point-in-time handoff, not a
+substitute for D7/D6 rechecking guard/authority before each future execution phase.
+
+The ArmPin helper uses D7's canonical type and D6 config_digest, in the required
+regex/frontier/base/finetuned order. D7 can consume the one spec, compare its exact
+run/corpus/population/lock/adoption/timing/resource commitments, build record-only
+worker sessions and retain gold in the evaluator. It must not bypass its custody
+open/resume journal, original ReceiptAuthority or actual isolation verification.
+
+The exporter rechecks current authority, refuses to write inside worker artifact
+roots, and creates only `<campaign_id>.campaign.json` exclusively in an existing
+operator handoff directory. It never overwrites a prior campaign or changes a
+trial receipt/unknown liability. It includes exact config pins and activation
+receipt; it grants no source publication or model redistribution permission.
+
+Future CLI (do not run during Dirty Mode):
+
+```text
+python scripts/train.py campaign --spec CAMPAIGN --validate-only
+python scripts/train.py campaign --spec CAMPAIGN --validate-only --check-files
+python scripts/train.py campaign --spec CAMPAIGN --activate --out EXISTING_HANDOFF_DIR
+```
+
+The ordinary training CLI remains compatible. Campaign activation from a bare
+console returns unavailable/authenticated_campaign_host_required, with no writes.
+A reviewed future operator host composes `train.main(argv, campaign_host=host)` or
+calls the producer directly; there is no arbitrary plugin import, credential
+setup, permissive local JSON trust store or fabricated native-enforcement stub.
+The explicit activation source is complete as a host-injected handoff and fails
+visibly when real authorization/isolation services have not been supplied.
+Missing license/hardware/provider/custody/evaluation/cost/isolation permissions
+remain named prerequisites, not empty successful stages.
+
+Interrupted/failed/cancelled training uses the existing authenticated accounting
+recovery API. A campaign cannot use an incomplete checkpoint or relabel missing
+receipts successful. Source still does not silently restart consumed trial slots.
+All native enforcement, model/checkpoint loading, provider permission, campaign
+activation, worker/file separation, cost concurrency and operator journey behavior
+remain runtime-unverified and require later authorized validation. No real
+campaign, terms approval, isolation verdict or independent acceptance was created.
+
+Current source reconciliation note: D4's edition capability binds one shared
+worker-policy/profile digest. D6's per-arm launch policy additionally pins its
+bootstrap/executable/entrypoint, and distinct arms naturally have distinct launch
+hashes. CampaignSpec retains the shared profile commitment; the actual D6/D7
+launcher must attest each exact allowed launch as a member of that approved
+profile. Different launch hashes must never be asserted equal. This seam was
+reported to INT for the D6/D7 owners; until those source owners reconcile it,
+activation must remain unavailable rather than weakening the isolation check.

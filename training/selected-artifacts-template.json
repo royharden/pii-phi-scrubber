@@ -1,0 +1,24 @@
+{
+  "schema_version": "SelectedArtifactManifest/v1",
+  "edition_id": "UNAPPROVED",
+  "training_plan_sha256": null,
+  "training_receipt_sha256": null,
+  "training_run_closeout_sha256": null,
+  "checkpoint_export_sha256": null,
+  "original_checkpoint_sha256": null,
+  "exported_artifact_tree_sha256": null,
+  "dev_selection_receipt_sha256": null,
+  "selection_lock_sha256": null,
+  "parity_receipt_sha256": null,
+  "training_artifact_hashes": {
+    "model": null, "tokenizer": null, "train": null, "dev": null,
+    "config": null, "environment": null, "license_packet": null, "custody_audit": null
+  },
+  "prior_known_training_cash_micros": 0,
+  "prior_unknown_training_liability_micros": 0,
+  "seed": null,
+  "optimizer_steps": null,
+  "epochs": null,
+  "base": null,
+  "finetuned": null
+}

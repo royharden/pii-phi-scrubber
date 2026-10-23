@@ -2,13 +2,20 @@
 
 import argparse
 from pathlib import Path
+import sys
 
 from _common import emit, guarded
 from m7.training import execute_training, validate_training_plan
 from m7.training.artifacts import inspect_artifacts, load_object
 
 
-def main():
+def main(argv=None, *, campaign_host=None):
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments[:1] == ["campaign"]:
+        from m7.training.campaign_cli import campaign_main
+        result = campaign_main(arguments[1:], host=campaign_host)
+        emit(result)
+        return 3 if result.get("status") == "unavailable" else 0
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--authorization", type=Path, required=True)
@@ -17,7 +24,7 @@ def main():
     mode.add_argument("--execute", action="store_true",
                       help="future authorized runtime only; forbidden during Dirty Mode")
     parser.add_argument("--staging-root", type=Path)
-    args = parser.parse_args()
+    args = parser.parse_args(arguments)
     plan, permit = load_object(args.plan), load_object(args.authorization)
     if args.execute:
         if args.staging_root is None:

@@ -60,3 +60,21 @@ an authenticated stopped-worker receipt. No callback defaults to true; no PID
 recency or missing heartbeat proves that a worker stopped. Recovery preserves
 originals and unknown liabilities, cannot turn a partial checkpoint into completed
 training, and starts no new trial. Its template grants nothing.
+
+## Campaign inference authority
+
+CampaignSpec/v1 requires separate local inference-license and hardware receipts,
+provider license/resource/terms receipts, a combined cash authorization that retains
+prior training liabilities, and original custody/evaluation/independent-audit
+references. Model training license permission is not inferred to cover inference
+or redistribution. Three adapter permits must bind the exact run/model/config,
+attempt-policy hash and allocated cap; all remain subject to issuer/current
+revocation checks in the real host authority store.
+
+The campaign pins D4 filesystem/worker-policy and actual isolation-capability
+digests. CampaignHost has no default verifier and requires D4 IsolationGuard's
+actual platform enforcement check before preparing a handoff. This source never
+installs or modifies that enforcement. A subprocess/path alone is not evidence.
+Unapproved templates contain no real hashes or permits; validate-only never grants
+activation. The host-injected --activate path fails explicitly if the real host
+is absent, and never runs a training/model/evaluation workload itself.
