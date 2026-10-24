@@ -117,3 +117,29 @@ Only three sequential single-concurrency passes over the same original codepoint
 Native/current continuation checks precede messages, records and new reservations. Existing byte, record, retry, token, response, timeout, lifetime, expiry and cancellation bounds apply unchanged. Wire commands carry only strict phase request/permit identities, never gold/custody/ledger paths, plugins or import selectors. Regex timing emits fresh value-free attempt metadata without inventing measured cash; frontier transport retains network labels. D7 owns validation/rendering measurement and separate control/scoring overhead. This source has not run a phase, worker, native probe or model/provider call.
 D4-F receipt bridge: the bound continuation authority must additionally expose `verify_receipt(kind,digest)` as canonical `CustodyTimingAuthority` does. D6 authenticates its original custody-chain consumption through that bridge. Do not recursively feed it into lifecycle/native IsolationGuard verification; native/current guard remains independent.
 As-built D7 bridge: `begin_timing_phase(request, permit, verify_receipt=authority.verify_receipt)` directly supplies the canonical live D4 receipt verifier; `bind_timing_authority` is optional on this path. The callback is retained only in the parent and rechecked before phase messages, records and reserves. Canonical D4 verification of the consumed custody receipt invokes `current(request,permit)`, including current native/revocation/expiry/cash checks. A static receipt lookup is insufficient. The callback never crosses the child wire or replaces the independent lifecycle verifier.
+
+## Host composition root (`m7.host`) - runtime unverified
+
+`m7.host` is inert wiring, not a trust service. An operator supplies `HostServices`:
+the external receipt verifier, `WindowsLaunchHost`, one preprovisioned launch context
+per worker arm in `bundle.campaign.launch_policies` (all of them, including regex),
+the three model-arm `ReservationLedger`s, `training_summary`, and for timing
+the `WarmBackendAttestor` and signed cash snapshot provider. The operator also builds
+`CustodyFilesystem`/`IsolationGuard` (optionally via `build_custody`) and a
+`WindowsWorkerProcessVerifier` over that same filesystem instance; the root refuses
+a different filesystem object because the timing process guard would.
+`build_campaign_host(services, bundle, timing_authorizations=None)` returns an
+`IsolatedCampaignHost` whose single launcher routes each exact launch spec to the one
+per-arm `WindowsIsolatedLauncher` built for it (any other spec is `permit_required`).
+`build_operator_host` and `build_training_host` return `OperatorHost` and
+`CampaignHost` over the same verifier and guard. Construction reads no files and
+starts nothing; `experiment.campaign` and `data.timing_native` checks still decide.
+The operator's `--operator-host` factory `(bundle, edition)` typically returns
+`build_campaign_host(services, bundle)` over services it constructed.
+
+`m7.host.unavailable` is the shipped refusing host. Its factories always raise
+`HostUnavailable`, so `scripts/eval.py --operator-host m7.host.unavailable:campaign_host`
+(or `:operator_host` for locked execution) and
+`scripts/train.py campaign --training-host m7.host.unavailable:training_host ...` report
+`status: unavailable` (exit 3). No allow-all or development verifier exists. Frontier,
+local-loader and training-engine injection through the host is not provided.

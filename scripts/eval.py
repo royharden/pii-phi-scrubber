@@ -108,7 +108,11 @@ def execute_locked(args):
     # Explicit operator-supplied trusted code. Construction must not load models,
     # read credentials or perform inference; it only provides factories/verifier.
     module, factory = args.operator_host.split(':')
-    host = getattr(importlib.import_module(module), factory)(edition)
+    try:
+        host = getattr(importlib.import_module(module), factory)(edition)
+    except Exception:
+        emit({'status': 'unavailable', 'reason': 'authenticated_operator_host_unavailable', 'product_acceptance': False})
+        return 3
     if not isinstance(host, OperatorHost):
         raise ValueError('operator_host_contract_required')
     from m7.data.lifecycle import CustodyLifecycle
