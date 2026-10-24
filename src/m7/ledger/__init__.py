@@ -1,6 +1,7 @@
 """Atomic SQLite reservation source. Construction has not opened a database."""
 from __future__ import annotations
 
+import math
 import sqlite3
 import re
 from contextlib import contextmanager
@@ -47,7 +48,18 @@ class ReservationLedger:
                 id TEXT PRIMARY KEY, reserved INTEGER NOT NULL CHECK(reserved>=0),
                 actual INTEGER, state TEXT NOT NULL, category TEXT NOT NULL,
                 usage_units INTEGER, receipt_id TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                amount_source TEXT NOT NULL DEFAULT 'estimated' CHECK(amount_source IN ('estimated','actual')),
+                compute_seconds REAL CHECK(compute_seconds IS NULL OR compute_seconds>=0))""")
+            # Stores created before amount source/compute proxy existed gain both columns.
+            columns = {row[1] for row in db.execute("PRAGMA table_info(attempts)").fetchall()}
+            if "amount_source" not in columns:
+                db.execute("ALTER TABLE attempts ADD COLUMN amount_source TEXT NOT NULL DEFAULT 'estimated' "
+                           "CHECK(amount_source IN ('estimated','actual'))")
+                db.execute("UPDATE attempts SET amount_source='actual' WHERE actual IS NOT NULL")
+            if "compute_seconds" not in columns:
+                db.execute("ALTER TABLE attempts ADD COLUMN compute_seconds REAL "
+                           "CHECK(compute_seconds IS NULL OR compute_seconds>=0)")
 
     def reserve(self, attempt_id: str, worst_case_micros: int, *, category: str) -> None:
         if (type(worst_case_micros) is not int or not 0 <= worst_case_micros <= 2**63 - 1
@@ -70,9 +82,20 @@ class ReservationLedger:
                        (attempt_id, worst_case_micros, category))
 
     def reconcile(self, attempt_id: str, *, actual_micros: int | None,
-                  state: str, usage_units: int | None = None, receipt_id: str | None = None) -> None:
+                  state: str, usage_units: int | None = None, receipt_id: str | None = None,
+                  compute_seconds: float | None = None) -> None:
+        """Record an outcome once; a later call may only resolve its unknown amount.
+
+        amount_source is 'actual' only with an authenticated receipt amount, else the
+        reservation stays the 'estimated' liability. compute_seconds is a time proxy,
+        never converted into cost.
+        """
         if state not in ("succeeded", "failed", "cancelled", "unknown"):
             raise ValueError("invalid_state")
+        if compute_seconds is not None and (type(compute_seconds) not in (int, float)
+                                            or not 0 <= compute_seconds <= 10**9
+                                            or not math.isfinite(compute_seconds)):
+            raise ValueError("invalid_compute_seconds")
         if actual_micros is not None and (type(actual_micros) is not int or not 0 <= actual_micros <= 2**63 - 1
                                           or not _identifier(receipt_id)):
             raise ValueError("actual_requires_receipt")
@@ -81,16 +104,41 @@ class ReservationLedger:
         if receipt_id is not None and not _identifier(receipt_id):
             raise ValueError('invalid_receipt_identifier')
         with self._transaction() as db:
-            previous = db.execute("SELECT reserved,actual,state,usage_units,receipt_id FROM attempts WHERE id=?", (attempt_id,)).fetchone()
+            previous = db.execute("SELECT reserved,actual,state,usage_units,receipt_id,compute_seconds FROM attempts WHERE id=?", (attempt_id,)).fetchone()
             if previous is None:
                 raise ValueError("unknown_attempt")
+            requested = (actual_micros, state, usage_units, receipt_id, compute_seconds)
+            if previous[1:] == requested:
+                return  # Idempotent replay of the same reconciliation.
             if previous[1] is not None:
-                if previous[1:] != (actual_micros, state, usage_units, receipt_id):
-                    raise ValueError("receipt_conflict")
-                return
+                # Replay that omits evidence already recorded is still the same receipt.
+                if ((actual_micros, state, receipt_id) == (previous[1], previous[2], previous[4])
+                        and usage_units in (None, previous[3]) and compute_seconds in (None, previous[5])):
+                    return
+                raise ValueError("receipt_conflict")
+            if previous[2] != "reserved":
+                # Terminal outcome with unresolved amount. A failed/cancelled outcome never
+                # becomes a success and its liability is never released without a receipt.
+                # Allowed: an authenticated actual for the same outcome, or any outcome
+                # when the prior one was 'unknown'. A request to mark it 'unknown' with no
+                # amount (recovery of an unusable receipt) is a no-op: the full reserved
+                # liability is already retained and the recorded outcome is not relabelled,
+                # so failed -> unknown -> succeeded cannot launder a failure.
+                if state == "unknown" and actual_micros is None and receipt_id is None:
+                    return
+                resolve = (actual_micros is not None and (previous[2] == "unknown" or state == previous[2]))
+                if (not resolve
+                        or (previous[3] is not None and usage_units not in (None, previous[3]))
+                        or (previous[5] is not None and compute_seconds not in (None, previous[5]))):
+                    raise ValueError("terminal_state_conflict")
+                # A resolution never erases earlier usage/compute evidence.
+                usage_units = previous[3] if usage_units is None else usage_units
+                compute_seconds = previous[5] if compute_seconds is None else compute_seconds
             # Overruns are recorded honestly, even when they exhaust authorization.
-            db.execute("UPDATE attempts SET actual=?,state=?,usage_units=?,receipt_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                       (actual_micros, state, usage_units, receipt_id, attempt_id))
+            db.execute("UPDATE attempts SET actual=?,state=?,usage_units=?,receipt_id=?,compute_seconds=?,"
+                       "amount_source=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                       (actual_micros, state, usage_units, receipt_id, compute_seconds,
+                        "estimated" if actual_micros is None else "actual", attempt_id))
 
     def summary(self) -> dict:
         with self._transaction() as db:
@@ -106,17 +154,24 @@ class ReservationLedger:
                     COALESCE(SUM(usage_units),0),
                     COALESCE(SUM(CASE WHEN usage_units IS NULL THEN 1 ELSE 0 END),0)
                     FROM attempts WHERE category=?""", (category,)).fetchone()
+                seconds, unknown_seconds = db.execute(
+                    """SELECT COALESCE(SUM(compute_seconds),0.0),
+                    COALESCE(SUM(CASE WHEN compute_seconds IS NULL THEN 1 ELSE 0 END),0)
+                    FROM attempts WHERE category=?""", (category,)).fetchone()
                 categories[category] = {'attempts_N': n, 'known_provider_cash_micros': cash,
                     'unresolved_liability_micros': liability, 'unknown_attempts': unknown,
-                    'known_usage_units': units, 'unknown_usage_attempts': unknown_units}
+                    'known_usage_units': units, 'unknown_usage_attempts': unknown_units,
+                    'known_compute_seconds': float(seconds), 'unknown_compute_attempts': unknown_seconds}
             states = {state: db.execute('SELECT COUNT(*) FROM attempts WHERE state=?', (state,)).fetchone()[0]
                       for state in ('reserved', 'succeeded', 'failed', 'cancelled', 'unknown')}
+            amount_sources = {source: db.execute('SELECT COUNT(*) FROM attempts WHERE amount_source=?',
+                                                 (source,)).fetchone()[0] for source in ('estimated', 'actual')}
         return {"authorization_id": self.authorization_id, "cap_micros": self.cap,
                 "known_provider_cash_micros": known, "unresolved_liability_micros": unresolved,
                 "unknown_attempts": count or 0, "remaining_micros": max(0, self.cap-known-unresolved),
                 "over_cap": known+unresolved > self.cap, "economic_total": None,
                 "attempts_N": sum(row['attempts_N'] for row in categories.values()),
-                "by_category": categories, "states": states,
+                "by_category": categories, "states": states, "amount_sources": amount_sources,
                 "economic_null_reason": "electricity_and_amortization_unmeasured"}
 
 

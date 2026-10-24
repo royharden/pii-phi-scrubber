@@ -135,3 +135,110 @@ def test_invalid_inputs_refused(tmp_path):
     other = ReservationLedger(tmp_path / "cost.sqlite3", cap_micros=500, authorization_id="auth-1")
     with pytest.raises(ValueError, match="authorization_mismatch"):
         other.reserve("f2", 10, category="inference")  # cannot widen the cap on the same store
+
+
+# R2: terminal outcomes, amount source and compute-time proxy.
+
+def test_failed_or_cancelled_outcome_cannot_be_rewritten_as_success(tmp_path):
+    led = ledger(tmp_path)
+    for attempt_id, state in (("x1", "failed"), ("x2", "cancelled")):
+        led.reserve(attempt_id, 30, category="inference")
+        led.reconcile(attempt_id, actual_micros=None, state=state)
+        # A later zero-cost "success" would release the 30-micro liability: refused.
+        with pytest.raises(ValueError, match="terminal_state_conflict"):
+            led.reconcile(attempt_id, actual_micros=0, state="succeeded", receipt_id="rcpt-" + attempt_id)
+        # Recovery marking it unknown without a receipt is a no-op (recovery.py:137 path):
+        # no exception, outcome not relabelled.
+        led.reconcile(attempt_id, actual_micros=None, state="unknown")
+        # ...so a later receipt cannot launder failed -> unknown -> succeeded.
+        with pytest.raises(ValueError, match="terminal_state_conflict"):
+            led.reconcile(attempt_id, actual_micros=0, state="succeeded", receipt_id="rcpt2-" + attempt_id)
+        # Exact replay is an idempotent no-op.
+        led.reconcile(attempt_id, actual_micros=None, state=state)
+    s = led.summary()
+    # Both 30-micro reservations still count: 60 unresolved, states unchanged.
+    assert s["unresolved_liability_micros"] == 60
+    assert (s["states"]["failed"], s["states"]["cancelled"], s["states"]["succeeded"]) == (1, 1, 0)
+    assert s["states"]["unknown"] == 0
+
+
+def test_resolution_keeps_earlier_usage_and_compute(tmp_path):
+    led = ledger(tmp_path)
+    led.reserve("w1", 30, category="inference")
+    led.reconcile("w1", actual_micros=None, state="failed", usage_units=4, compute_seconds=2.5)
+    led.reconcile("w1", actual_micros=9, state="failed", receipt_id="rcpt-w1")  # usage/compute omitted
+    inf = led.summary()["by_category"]["inference"]
+    assert (inf["known_usage_units"], inf["known_compute_seconds"]) == (4, 2.5)
+    led.reconcile("w1", actual_micros=9, state="failed", receipt_id="rcpt-w1")  # same replay: no-op
+    with pytest.raises(ValueError, match="receipt_conflict"):
+        led.reconcile("w1", actual_micros=9, state="failed", receipt_id="rcpt-w1", usage_units=5)
+
+
+def test_migration_adds_columns_and_marks_existing_actuals(tmp_path):
+    import sqlite3
+    path = tmp_path / "old.sqlite3"
+    # Pre-R2 schema with one reconciled (actual 7) and one open row.
+    con = sqlite3.connect(path)
+    con.executescript("""CREATE TABLE authorization (id TEXT PRIMARY KEY, cap INTEGER NOT NULL);
+        INSERT INTO authorization VALUES ('auth-1', 100);
+        CREATE TABLE attempts (id TEXT PRIMARY KEY, reserved INTEGER NOT NULL CHECK(reserved>=0),
+            actual INTEGER, state TEXT NOT NULL, category TEXT NOT NULL, usage_units INTEGER, receipt_id TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+        INSERT INTO attempts(id,reserved,actual,state,category,receipt_id) VALUES ('m1',10,7,'succeeded','inference','rcpt-m1');
+        INSERT INTO attempts(id,reserved,state,category) VALUES ('m2',20,'reserved','inference');""")
+    con.commit()
+    con.close()
+    led = ReservationLedger(path, cap_micros=100, authorization_id="auth-1")
+    led.initialize()
+    s = led.summary()
+    assert s["amount_sources"] == {"estimated": 1, "actual": 1}
+    assert s["by_category"]["inference"]["unknown_compute_attempts"] == 2
+    assert (s["known_provider_cash_micros"], s["unresolved_liability_micros"]) == (7, 20)
+
+
+def test_failed_outcome_may_later_receive_its_actual_charge(tmp_path):
+    led = ledger(tmp_path)
+    led.reserve("y1", 30, category="inference")
+    led.reconcile("y1", actual_micros=None, state="failed")
+    # Provider later bills 12 for the failed call; state stays failed.
+    led.reconcile("y1", actual_micros=12, state="failed", receipt_id="rcpt-y1")
+    s = led.summary()
+    assert (s["known_provider_cash_micros"], s["unresolved_liability_micros"]) == (12, 0)
+    assert s["states"]["failed"] == 1 and s["amount_sources"] == {"estimated": 0, "actual": 1}
+
+
+def test_unknown_outcome_may_resolve_with_receipt(tmp_path):
+    led = ledger(tmp_path)
+    led.reserve("z1", 30, category="inference")
+    led.reconcile("z1", actual_micros=None, state="unknown")
+    led.reconcile("z1", actual_micros=20, state="succeeded", receipt_id="rcpt-z1")
+    s = led.summary()
+    assert s["states"]["succeeded"] == 1 and s["states"]["unknown"] == 0
+    assert (s["known_provider_cash_micros"], s["unresolved_liability_micros"], s["remaining_micros"]) == (20, 0, 80)
+
+
+def test_amount_source_and_compute_proxy_are_recorded_separately(tmp_path):
+    led = ledger(tmp_path)
+    led.reserve("p1", 40, category="training")
+    led.reserve("p2", 40, category="training")
+    led.reserve("p3", 10, category="inference")
+    led.reconcile("p1", actual_micros=25, state="succeeded", receipt_id="rcpt-p1", compute_seconds=90.5)
+    led.reconcile("p2", actual_micros=None, state="failed", compute_seconds=12)
+    s = led.summary()
+    # p1 actual; p2 (unresolved) and p3 (still reserved) are estimates.
+    assert s["amount_sources"] == {"estimated": 2, "actual": 1}
+    t = s["by_category"]["training"]
+    # Training compute 90.5 + 12 = 102.5 s; no training attempt lacks a proxy.
+    assert t["known_compute_seconds"] == 102.5 and t["unknown_compute_attempts"] == 0
+    i = s["by_category"]["inference"]
+    assert i["known_compute_seconds"] == 0.0 and i["unknown_compute_attempts"] == 1
+    # The time proxy is never turned into money.
+    assert s["economic_total"] is None and s["known_provider_cash_micros"] == 25
+
+
+@pytest.mark.parametrize("bad", [-1, float("nan"), float("inf"), True, "5", 10**400])
+def test_invalid_compute_seconds_refused(tmp_path, bad):
+    led = ledger(tmp_path)
+    led.reserve("q1", 10, category="inference")
+    with pytest.raises(ValueError, match="invalid_compute_seconds"):
+        led.reconcile("q1", actual_micros=None, state="unknown", compute_seconds=bad)
