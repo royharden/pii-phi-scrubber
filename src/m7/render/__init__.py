@@ -23,6 +23,9 @@ def render(record: LogRecord, prediction: Prediction) -> RenderResult:
         message = message[:interval.start] + interval.placeholder + message[interval.end:]
     # Rendered placeholders can lengthen a valid message beyond the inference bound.
     # The bound applies to detector input; reject expansion rather than bypass schema.
+    # Empty output is never a successful scrub (plan failure table: empty output).
+    if not message:
+        return RenderResult(record_id=record.record_id, content_sha256=record.content_sha256, schema_valid=False, error_code='invalid_structure')
     try:
         safe_log = LogFields(timestamp=record.log.timestamp, level=record.log.level, event=record.log.event, message=message)
     except ValueError:

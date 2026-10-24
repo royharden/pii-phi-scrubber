@@ -4,7 +4,7 @@ import re
 from m7.contracts import LogRecord, Prediction, Span
 
 PLACEHOLDER = re.compile(r'\[(?:NAME|EMAIL|PHONE|ACCOUNT_ID|REDACTED)_\d+\]')
-EMAIL = re.compile(r'(?<![\w.+-])[A-Za-z0-9.!#$%&\x27*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+(?![\w.-])')
+EMAIL = re.compile(r'(?<![\w.+-])[A-Za-z0-9.!#$%&\x27*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)+(?![\w-])(?!\.[\w-])')
 ACCOUNT = re.compile(r'\b(?:account(?:_id)?|customer(?:_id)?|user_id)\s*[:=#]\s*(?P<value>[A-Za-z0-9][A-Za-z0-9_-]{2,63})\b', re.IGNORECASE)
 NAME = re.compile(r'\b(?:person|name|user)\s*[:=]\s*(?P<value>[A-Z][a-z]+(?:-[A-Z][a-z]+)? (?:[A-Z]\. )?[A-Z][a-z]+(?:-[A-Z][a-z]+)?)\b')
 PHONE = re.compile(r'\b(?:phone|tel|mobile)\s*[:=]\s*(?P<value>(?:\+[1-9]\d{6,14}|(?:\+1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]\d{3}[ .-]\d{4})(?:\s*(?:ext\.?|x)\s*\d{1,6})?)(?!\d)', re.IGNORECASE)
