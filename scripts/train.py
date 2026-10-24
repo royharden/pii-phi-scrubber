@@ -9,11 +9,11 @@ from m7.training import execute_training, validate_training_plan
 from m7.training.artifacts import inspect_artifacts, load_object
 
 
-def main(argv=None, *, campaign_host=None):
+def main(argv=None, *, campaign_host=None, timing_snapshot_provider=None):
     arguments = list(sys.argv[1:] if argv is None else argv)
     if arguments[:1] == ["campaign"]:
         from m7.training.campaign_cli import campaign_main
-        result = campaign_main(arguments[1:], host=campaign_host)
+        result = campaign_main(arguments[1:], host=campaign_host, timing_snapshot_provider=timing_snapshot_provider)
         emit(result)
         return 3 if result.get("status") == "unavailable" else 0
     parser = argparse.ArgumentParser(description=__doc__)

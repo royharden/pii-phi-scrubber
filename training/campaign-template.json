@@ -12,6 +12,7 @@
   "targets": null,
   "adoption_policy_sha256": null,
   "timing_plan_sha256": null,
+  "timing_resource_schedule_sha256": null,
   "frontier": null,
   "regex_model_id": "context-regex-v1",
   "regex_artifact_sha256": null,

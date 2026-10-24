@@ -1,0 +1,18 @@
+{
+  "schema_version": "TimingResourceSchedule/v1",
+  "plan_sha256": null,
+  "population_sha256": null,
+  "order_sha256": null,
+  "intended_records": 1,
+  "passes": 3,
+  "concurrency": 1,
+  "warmup_policy": "retain_primary_process_and_backend_no_extra_warmup",
+  "currency": "USD",
+  "prior_training_closeout_sha256": null,
+  "prior_known_training_cash_micros": 0,
+  "prior_unknown_training_liability_micros": 0,
+  "total_campaign_authorized_cash_micros": 0,
+  "arms": {},
+  "ledger_categories": ["inference", "retry"],
+  "quote_status": "worst_case_reservation_bounds_not_observed_cost"
+}

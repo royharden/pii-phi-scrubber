@@ -1,0 +1,21 @@
+{
+  "schema_version": "TimingResourceAuthorization/v1",
+  "authorization_id": "UNAPPROVED",
+  "approved_by": "UNAPPROVED",
+  "approved": false,
+  "action": "qualify_three_fixed_timing_pass_resources",
+  "schedule_sha256": null,
+  "bundle_sha256": null,
+  "campaign_sha256": null,
+  "edition_sha256": null,
+  "primary_accounting_sha256": null,
+  "plan_sha256": null,
+  "profile_sha256": null,
+  "launch_sha256_by_arm": {},
+  "warm_identity_sha256_by_arm": {},
+  "unavailable_arms": {},
+  "currency": "USD",
+  "cash_authorization_sha256": null,
+  "issued_at": null,
+  "expires_at": null
+}

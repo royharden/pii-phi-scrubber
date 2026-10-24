@@ -11,11 +11,12 @@ from .campaign import CampaignHost, export_prepared_campaign, prepare_campaign, 
 from .campaign_models import CampaignSpec
 
 
-def campaign_main(argv=None, *, host: CampaignHost | None = None) -> dict:
+def campaign_main(argv=None, *, host: CampaignHost | None = None, timing_snapshot_provider=None) -> dict:
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--spec", type=Path, help="campaign-only control-plane validation/handoff")
     source.add_argument("--launch-bundle", type=Path, help="joined D6/D7 worker bundle or immutable handoff")
+    source.add_argument("--timing-resources", "--timing-handoff", dest="timing_handoff", type=Path, help="post-primary resource continuation; never resets a worker")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--validate-only", action="store_true")
     mode.add_argument("--activate", action="store_true",
@@ -25,6 +26,24 @@ def campaign_main(argv=None, *, host: CampaignHost | None = None) -> dict:
     args = parser.parse_args(argv)
     # Strict duplicate-key/size/nonfinite guard before canonical schema parsing.
     try:
+        if args.timing_handoff is not None:
+            from .timing_resources import export_timing_handoff, load_timing_handoff, prepare_timing_handoff, validate_timing_handoff
+            handoff = load_timing_handoff(args.timing_handoff)
+            if args.activate:
+                if host is None or timing_snapshot_provider is None:
+                    return {"status": "unavailable", "reason": "authenticated_timing_host_and_cash_snapshot_required",
+                            "activation_allowed": False, "phase_started": False, "heldout_reopened": False}
+                prepared = prepare_timing_handoff(handoff, host=host, snapshot_provider=timing_snapshot_provider)
+                if args.out is not None:
+                    return export_timing_handoff(prepared, args.out, host=host, snapshot_provider=timing_snapshot_provider)
+                return {"status": prepared.receipt.status, "handoff_sha256": handoff.sha256,
+                        "preparation": prepared.receipt.model_dump(mode="json"),
+                        "phase_started": False, "heldout_reopened": False}
+            if args.out is not None:
+                raise ValueError("validation_cannot_write_handoff")
+            if args.check_files:
+                validate_campaign(handoff.bundle.campaign, check_files=True)
+            return validate_timing_handoff(handoff)
         if args.launch_bundle is not None:
             from .launch_bundle import export_launch_bundle, load_launch_bundle, prepare_launch_bundle, validate_launch_bundle
             bundle = load_launch_bundle(args.launch_bundle)

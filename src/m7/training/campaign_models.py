@@ -106,6 +106,7 @@ class CampaignSpec(Boundary):
     targets: NumericalTargets
     adoption_policy_sha256: Digest
     timing_plan_sha256: Digest
+    timing_resource_schedule_sha256: Digest | None = None
     frontier: FrontierConfig
     regex_model_id: Identifier
     regex_artifact_sha256: Digest

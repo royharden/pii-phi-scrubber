@@ -280,6 +280,8 @@ def prepare_campaign(spec: CampaignSpec, *, host: CampaignHost,
         authenticate(host.verify_receipt, kind, sha)
     for permit in spec.permits:
         authenticate(host.verify_receipt, "adapter_permit", digest(permit.model_dump(mode="json")))
+    if spec.timing_resource_schedule_sha256 is not None:
+        authenticate(host.verify_receipt, "timing_resource_schedule", spec.timing_resource_schedule_sha256)
     for policy in spec.policies.values():
         authenticate(host.verify_receipt, "attempt_policy", digest(policy.model_dump(mode="json")))
         authenticate(host.verify_receipt, "rate_quote", policy.rate_receipt_sha256)
