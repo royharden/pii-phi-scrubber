@@ -126,6 +126,16 @@ class ReservationLedger:
                 # so failed -> unknown -> succeeded cannot launder a failure.
                 if state == "unknown" and actual_micros is None and receipt_id is None:
                     return
+                if actual_micros is None and receipt_id is None and state == previous[2]:
+                    # Same outcome, still no amount: only fill missing usage/compute
+                    # evidence (e.g. recovery replaying a receipt's duration). Liability unchanged.
+                    if ((previous[3] is not None and usage_units not in (None, previous[3]))
+                            or (previous[5] is not None and compute_seconds not in (None, previous[5]))):
+                        raise ValueError("terminal_state_conflict")
+                    db.execute("UPDATE attempts SET usage_units=COALESCE(usage_units,?),"
+                               "compute_seconds=COALESCE(compute_seconds,?),updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                               (usage_units, compute_seconds, attempt_id))
+                    return
                 resolve = (actual_micros is not None and (previous[2] == "unknown" or state == previous[2]))
                 if (not resolve
                         or (previous[3] is not None and usage_units not in (None, previous[3]))

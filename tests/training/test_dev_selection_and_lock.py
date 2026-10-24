@@ -245,3 +245,19 @@ def test_class_target_lower_bound_cannot_exceed_point_target():
         ClassTarget(recall=0.90, recall_lower_95=0.95)
     with pytest.raises(ValidationError):
         NumericalTargets(per_class={"NAME": ClassTarget()})  # missing three classes
+
+
+def test_verify_rechecks_selection_chronology():
+    # A lock assembled outside create_pre_test_lock over a selection whose first evaluation
+    # (02:30) is AFTER its created_at (02:00). Binding/approval hashes are self-consistent,
+    # so only the registered <= first_evaluated <= created re-check can refuse it.
+    sel = selection(first_evaluated_at="2026-01-01T02:30:00Z")
+    par = parity(sel)
+    just = justification(sel)
+    appr = approval_for(sel, par, just)
+    binding = lock_binding(sel, par, just, corpus_manifest_sha256=h("c"))
+    lock = PreTestSelectionLock(**binding, approval_sha256=digest(appr.model_dump(mode="json")),
+                                locked_at="2026-01-01T05:00:00+00:00", expires_at=APPROVAL_EXPIRES)
+    with pytest.raises(ValueError, match="pre_test_lock_binding_or_expiry_mismatch"):
+        verify_pre_test_lock(lock, selection=sel, parity=par, justification=just, approval=appr,
+                             verify_receipt=Verifier(), clock=lambda: utc("2026-01-01T06:00:00Z"))

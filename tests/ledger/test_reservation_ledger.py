@@ -242,3 +242,19 @@ def test_invalid_compute_seconds_refused(tmp_path, bad):
     led.reserve("q1", 10, category="inference")
     with pytest.raises(ValueError, match="invalid_compute_seconds"):
         led.reconcile("q1", actual_micros=None, state="unknown", compute_seconds=bad)
+
+
+def test_same_outcome_replay_may_only_fill_missing_evidence(tmp_path):
+    # Recovery replays a receipt's duration onto a row the executor recorded without it.
+    led = ledger(tmp_path)
+    led.reserve("v1", 30, category="training")
+    led.reconcile("v1", actual_micros=None, state="succeeded", usage_units=10)
+    led.reconcile("v1", actual_micros=None, state="succeeded", usage_units=10, compute_seconds=3.0)
+    t = led.summary()["by_category"]["training"]
+    assert (t["known_compute_seconds"], t["unknown_compute_attempts"], t["known_usage_units"]) == (3.0, 0, 10)
+    with pytest.raises(ValueError, match="terminal_state_conflict"):
+        led.reconcile("v1", actual_micros=None, state="succeeded", usage_units=10, compute_seconds=4.0)
+    with pytest.raises(ValueError, match="terminal_state_conflict"):
+        led.reconcile("v1", actual_micros=None, state="failed", compute_seconds=3.0)  # outcome change refused
+    # Liability untouched by evidence fill: 30 still unresolved.
+    assert led.summary()["unresolved_liability_micros"] == 30

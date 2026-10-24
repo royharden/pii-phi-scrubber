@@ -6,6 +6,7 @@ import importlib.metadata
 import json
 from pathlib import Path
 import platform
+from typing import Callable
 
 from .validation import digest, identifier, shape
 
@@ -78,7 +79,22 @@ def load_object(path: Path, *, max_bytes: int = 32_000_000) -> dict:
     return value
 
 
-def inspect_artifacts(plan: dict, root: Path, *, check_environment: bool = True) -> tuple[dict, dict]:
+def check_installed_environment(environment: dict) -> None:
+    """Default host check: running Python and installed package versions must match."""
+    if platform.python_version() != environment["python"]:
+        raise ValueError("python_environment_mismatch")
+    try:
+        versions = {key: importlib.metadata.version(key) for key in environment["packages"]}
+    except importlib.metadata.PackageNotFoundError:
+        raise ValueError("training_dependency_unavailable") from None
+    if versions != environment["packages"]:
+        raise ValueError("package_environment_mismatch")
+
+
+def inspect_artifacts(plan: dict, root: Path, *, check_environment: bool = True,
+                      environment_check: Callable[[dict], None] | None = None) -> tuple[dict, dict]:
+    """environment_check replaces only the installed-version probe (it must raise
+    ValueError to refuse); pin/shape/scope checks always run. None = real check."""
     paths = {}
     for key, pin in plan["artifacts"].items():
         path = local_path(root, pin["path"])
@@ -121,14 +137,7 @@ def inspect_artifacts(plan: dict, root: Path, *, check_environment: bool = True)
         raise ValueError("environment_scope_mismatch")
     shape(environment["packages"], {"gliner", "torch", "transformers", "accelerate", "safetensors"})
     if check_environment:
-        if platform.python_version() != environment["python"]:
-            raise ValueError("python_environment_mismatch")
-        try:
-            versions = {key: importlib.metadata.version(key) for key in environment["packages"]}
-        except importlib.metadata.PackageNotFoundError:
-            raise ValueError("training_dependency_unavailable") from None
-        if versions != environment["packages"]:
-            raise ValueError("package_environment_mismatch")
+        (environment_check or check_installed_environment)(json.loads(json.dumps(environment)))
     config = load_object(paths["config"])
     shape(config, {"schema_version", "labels", "label_descriptions", "max_message_codepoints", "max_model_tokens",
                    "decoder_sha256", "label_descriptions_sha256"})

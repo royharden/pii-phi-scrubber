@@ -82,6 +82,9 @@ def recover_training_run(plan: dict, permit: dict, *, root: Path,
         raise ValueError("recovery_ledger_unplanned_attempts")
     rows = []
     ledger = ReservationLedger(db_path, cap_micros=permit["cap_micros"], authorization_id=permit["authorization_id"])
+    if db_path.exists():
+        # Migrate a pre-amount_source store before reconciling; never create a missing one.
+        ledger.initialize()
     for trial in plan["trials"]:
         attempt = training_attempt_id(digest(plan), trial["trial_id"])
         trial_dir = run_dir / trial["trial_id"]
@@ -124,6 +127,7 @@ def recover_training_run(plan: dict, permit: dict, *, root: Path,
                     # Repair only accounting, using the immutable original outcome.
                     ledger.reconcile(attempt, actual_micros=receipt["actual_micros"],
                         receipt_id=receipt["billing_receipt_id"], usage_units=receipt["optimizer_steps"],
+                        compute_seconds=receipt["duration_seconds"] if receipt["duration_seconds"] <= 10**9 else None,
                         state={"completed": "succeeded", "oom": "failed"}.get(receipt["status"], receipt["status"]))
                     if receipt["actual_micros"] is not None:
                         existing = (existing[0], receipt["actual_micros"], "succeeded", receipt["optimizer_steps"],

@@ -125,6 +125,8 @@ def verify_pre_test_lock(lock: PreTestSelectionLock, *, selection: dict, parity:
     if (any(getattr(lock, key) != value for key, value in binding.items()) or
             lock.approval_sha256 != digest(approval.model_dump(mode="json")) or
             approval.binding_sha256 != digest(binding) or
+            not utc(selection["registered_at"]) <= utc(selection["first_evaluated_at"]) <=
+                utc(selection["created_at"]) <= utc(justification["created_at"]) or
             not utc(justification["created_at"]) <= utc(approval.issued_at) <= utc(lock.locked_at) <= clock() <
                 utc(lock.expires_at) <= utc(approval.expires_at)):
         raise ValueError("pre_test_lock_binding_or_expiry_mismatch")

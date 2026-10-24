@@ -64,12 +64,15 @@ def _write_json(path: Path, value: dict) -> None:
 def execute_training(plan: dict, permit: dict, *, root: Path | str,
                      engine: TrainingEngine | None = None,
                      cancel: Callable[[], bool] | None = None,
-                     clock: Callable[[], datetime] = now_utc) -> dict:
+                     clock: Callable[[], datetime] = now_utc,
+                     environment_check: Callable[[dict], None] | None = None) -> dict:
     """Execute only when separately authorized after Dirty Mode closes.
 
     Root must be a dedicated OS-isolated staging area with no held-out access.
     This function does not create that environment or attest permit authenticity.
     A repeated plan/edition is refused rather than silently restarting a trial.
+    environment_check (tests/trusted hosts) replaces only the installed-version
+    probe and must raise ValueError to refuse; None runs the real check.
     """
     # Detach caller-owned mappings so later mutation cannot rewrite lineage.
     plan = json.loads(json.dumps(plan, allow_nan=False))
@@ -81,7 +84,7 @@ def execute_training(plan: dict, permit: dict, *, root: Path | str,
     for part in (staging, *staging.parents):
         no_links(part)
     staging = staging.resolve(strict=True)
-    paths, metadata = inspect_artifacts(plan, staging)
+    paths, metadata = inspect_artifacts(plan, staging, environment_check=environment_check)
     train_rows = load_training_data(paths["train"], "train")
     dev_rows = load_training_data(paths["dev"], "dev")
     if ({r["record"].content_sha256 for r in train_rows} &
@@ -137,7 +140,7 @@ def execute_training(plan: dict, permit: dict, *, root: Path | str,
             blocked_reason = "permit_not_current"
             break
         try:
-            inspect_artifacts(plan, staging)
+            inspect_artifacts(plan, staging, environment_check=environment_check)
         except (ValueError, OSError):
             blocked_reason = "artifact_or_environment_invalid"
             break
@@ -187,7 +190,7 @@ def execute_training(plan: dict, permit: dict, *, root: Path | str,
                 identifier(result.billing_receipt_id)
             checkpoint_hash = tree_sha256(trial_dir / "checkpoint")
             # Reject a backend that altered its pinned inputs, not just outputs.
-            inspect_artifacts(plan, staging)
+            inspect_artifacts(plan, staging, environment_check=environment_check)
             status, error = "completed", None
         except (TrainingCancelled, KeyboardInterrupt):
             status, error, cancelled = "cancelled", "cancelled", True
@@ -226,6 +229,8 @@ def execute_training(plan: dict, permit: dict, *, root: Path | str,
         _write_json(trial_dir / "receipt.json", receipt)
         ledger.reconcile(attempt_id, actual_micros=actual, receipt_id=billing,
                          usage_units=receipt["optimizer_steps"],
+                         # Ledger proxy bound is 0..1e9 s; an out-of-range duration stays unknown.
+                         compute_seconds=receipt["duration_seconds"] if receipt["duration_seconds"] <= 10**9 else None,
                          state={"completed": "succeeded", "oom": "failed"}.get(status, status))
         receipts.append(receipt)
     run = {"schema_version": "TrainingRun/v2", "edition_id": plan["edition_id"],
