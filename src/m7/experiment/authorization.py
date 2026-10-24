@@ -42,9 +42,15 @@ class ReceiptAuthority:
         self.verify_receipt = verify_receipt
 
     @staticmethod
-    def validate_binding(packet: EvaluationAuthorization, edition: LockedEdition) -> None:
-        """Pure binding/expiry check. Does not authenticate or consume custody open."""
-        now = datetime.now(timezone.utc)
+    def validate_binding(packet: EvaluationAuthorization, edition: LockedEdition, *,
+                         now: datetime | None = None) -> None:
+        """Pure binding/expiry check. Does not authenticate or consume custody open.
+
+        `now` lets trusted callers/tests pin the instant; None uses the real UTC clock.
+        """
+        now = now or datetime.now(timezone.utc)
+        if now.tzinfo is None or now.utcoffset() is None:
+            raise ValueError('timezone_required')
         if not utc_time(packet.issued_at) <= now < utc_time(packet.expires_at):
             raise ValueError('evaluation_authorization_expired')
         if (packet.edition_id != edition.edition_id or packet.run_id != edition.run_id
