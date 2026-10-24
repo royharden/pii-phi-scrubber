@@ -312,9 +312,17 @@ class WorkerSession(WarmSessionMixin):
             known = self._attempts.get(event.attempt.attempt_id) if event.attempt.attempt_id in self._request_attempts else None
             payload = event.model_dump(mode="json")
             if known is not None:
-                payload["attempt"]["actual_micros"] = known["actual"]
-                payload["attempt"]["liability_status"] = "known" if known["actual"] is not None else "unknown"
-            elif event.attempt.reservation_micros is not None:
+                # Every liability field of a brokered attempt is the parent's own record.
+                payload["attempt"].update(
+                    actual_micros=known["actual"], reservation_micros=known["reserved"],
+                    ordinal=known["ordinal"], physical_may_have_started=True,
+                    liability_status="known" if known["actual"] is not None else "unknown")
+            elif not (event.attempt.liability_status == "not_reserved"
+                      or (self.arm == "regex" and event.attempt.liability_status == "unknown"
+                          and event.attempt.reservation_micros is None and event.attempt.actual_micros is None)):
+                # An attempt the parent never reserved can carry no cash or reservation
+                # claim; the child's word never creates liability facts. The ledger-free
+                # regex arm's own timing events (unknown, no reservation, no cash) remain.
                 raise AdapterFault("invalid_output")
             normalized = AttemptEvent.model_validate_json(json.dumps(payload, allow_nan=False))
             checked.append(normalized)
