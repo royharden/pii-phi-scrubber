@@ -316,3 +316,72 @@ verification separate from exact-PID/full-L postlaunch qualification. It still
 requires actual current native control evidence and never applies permissions,
 starts a process or treats any-job/handle-count observations as full isolation.
 Its CLI defaults to validation only. No native qualification ran in construction.
+
+## Post-primary timing continuation
+
+`m7.data.timing.CustodyTimingAuthority(lifecycle, edition, authorization,
+resources=..., verify_process=...)` implements D7's canonical
+`TimingContinuationAuthority`. Its `prepare(primary, plan)` is nonconsuming;
+`authorize(request)` writes `CustodyTimingConsumed/v1` before returning a
+`TimingPhasePermit`; `current(request, permit)` reauthenticates before every
+message; `finish(request, completed=...)` appends `CustodyTimingTerminal/v1`.
+No method invokes release/open, exports gold, resets a worker or calls inference.
+The original private custody hashchain and writer lock hold all phase records.
+A fresh timing directory or authority object cannot erase prior consumption.
+
+The separately externally authenticated `CustodyTimingAuthorization/v1` binds the
+original release, full edition/run, experiment plan, corpus and selection lock,
+closed primary accounting, preregistered timing plan/population/order/arm pins,
+shared profile P, exact surviving warm identity/full launch L commitments,
+capability/filesystem, D5 resource authorization and UTC expiry. All four original
+arm pins and the full population remain fixed. `backends` is a unique ordered
+subset of actual surviving original workers; missing arms remain unavailable in
+D7's fixed denominator. No invented identity, cold replacement, extra warmup,
+selection change, or all-success primary prerequisite is allowed. Closed negative
+and interrupted-unknown terminal outcomes remain committed; unresolved primary
+begins cannot qualify. Phase completion means accounting/protocol completion,
+not successful predictions or independent acceptance.
+
+The trusted lifecycle verifier must authenticate `primary_accounting` against the
+actual original immutable closed D7 journal, its head/cells/quality and zero
+unresolved begins; shape or a hash alone is insufficient. It must also authenticate
+`custody_timing_authorization`, `evaluation_authorization`,
+`warm_backend_attestation` and the original current release receipts. D5's
+`TimingResourceAuthority.prepare/qualify/current` supplies fresh cash/cap/retry
+qualification; the returned receipt must match the exact request and the pinned
+resource authorization. Existing training/primary/uncertain liabilities remain
+D5's responsibility, never implicitly zero. No resource or custody approval is
+created by declaration validation.
+
+`WindowsTimingProcessGuard(lifecycle, process_verifier, policies)` is the concrete
+callback adapter for `verify_process`. Every explicit callback checks current
+capability and canonical P/member/L/bootstrap bindings, then invokes
+`WindowsWorkerProcessVerifier.verify(pid, start_identity, launch_spec, verified,
+policy)` including its mandatory real native control verifier. The real D6 host
+must retain the original borrowed contexts, current exact-process approvals and
+actual environment/network/lifetime/handle evidence. Prepared-policy qualification
+cannot substitute for running-process proof. Other host callbacks must satisfy
+that same actual-enforcement contract; there is no permissive fallback.
+
+Wire `authority.verify_receipt` into D7/D6's parent receipt verifier for
+`timing_custody_continuation`; it recognizes only an unfinished live original
+permit and rechecks current guards. Other kinds delegate to the lifecycle's
+trusted verifier. Do not replace the lifecycle verifier with this adapter, which
+would recurse. No custody/store paths or gold cross the worker wire.
+
+Each arm consumes ordinals1..3 in order; parent namespaces use D7's canonical
+`{primary, plan, identity, ordinal}` digest. Only one phase may be outstanding per
+edition. Duplicate consumption, changed authority/backend/launch or advancing an
+aborted arm fails closed. An unmatched consumed record requires investigation;
+there is no resume, clear, recovery authorization, or new-journal bypass. A live
+issuer instance is required for messages and completed termination. An explicit
+abort can be appended even after expiry/revocation/lost ownership, preserving the
+original request and never granting another call. It cannot retry that phase or
+advance that arm. A crash during append remains uncertain. No automatic repair
+or deletion is provided. Original revocation/supersession immediately blocks new
+phases/current checks/completion, while permitting honest abort accounting.
+
+`CustodyLifecycle.inspect()` now reports consumed/completed/aborted/uncertain
+ordinals for every original arm. Inspection remains mechanical and value-free;
+empty history is not evidence of measured zero latency/cost or authorization.
+Construction ran no native qualification, timing, worker, store or model action.

@@ -16,6 +16,7 @@ from .models import BlockAssignment, CorpusBundle, CorpusPlan, FamilyInventory, 
 from .provenance import audit_inventory, commitment
 from .access import IsolationGuard
 from .filesystem import CustodyFilesystem
+from .timing_models import TimingPhaseConsumed, TimingPhaseTerminal, validate_timing_transition
 
 
 def utc(value: str) -> datetime:
@@ -85,10 +86,12 @@ def _states(events) -> dict[str, _State]:
     states: dict[str, _State] = {}
     replacements: dict[str, str] = {}
     last_time: datetime | None = None
+    timing: dict[str, list] = {}
     for event in events:
         receipt = event.receipt
         field = {FreezeReceipt: 'frozen_at', SealReceipt: 'sealed_at', CustodyRelease: 'released_at',
-                 OpenReceipt: 'opened_at', RevokeReceipt: 'revoked_at', SupersedeReceipt: 'superseded_at'}[type(receipt)]
+                 OpenReceipt: 'opened_at', RevokeReceipt: 'revoked_at', SupersedeReceipt: 'superseded_at',
+                 TimingPhaseConsumed: 'consumed_at', TimingPhaseTerminal: 'finished_at'}[type(receipt)]
         time = utc(getattr(receipt, field))
         if last_time is not None and time < last_time:
             raise ValueError('custody_event_time_regression')
@@ -110,6 +113,12 @@ def _states(events) -> dict[str, _State]:
             continue
         if state is None:
             raise ValueError('custody_event_without_freeze')
+        if isinstance(receipt, (TimingPhaseConsumed, TimingPhaseTerminal)):
+            prior = timing.setdefault(receipt.edition_id, [])
+            validate_timing_transition(receipt, tuple(prior), release=state.release,
+                opened=state.opened, active=state.revoked is None and state.superseded is None)
+            prior.append(receipt)
+            continue
         if isinstance(receipt, SupersedeReceipt):
             if state.superseded is not None or receipt.replacement_edition_id == receipt.edition_id:
                 raise ValueError('edition_already_superseded')
@@ -463,6 +472,22 @@ class CustodyLifecycle:
                          'freeze_sha256': commitment(state.freeze),
                          'seal_sha256': commitment(state.seal) if state.seal else None,
                          'release_sha256': commitment(state.release) if state.release else None,
-                         'intended_test_records': state.seal.intended_test_records if state.seal else None})
+                         'intended_test_records': state.seal.intended_test_records if state.seal else None,
+                         'timing': self._timing_inventory(events, identity)})
         return {'schema_version': 'CustodyInspection/v1', 'event_count': len(events), 'editions': rows,
                 'independent_verdict_issued': False}
+
+    @staticmethod
+    def _timing_inventory(events, edition_id: str) -> dict:
+        receipts = [e.receipt for e in events if e.receipt.edition_id == edition_id]
+        starts = [r for r in receipts if isinstance(r, TimingPhaseConsumed)]
+        ends = {r.consumed_sha256: r for r in receipts if isinstance(r, TimingPhaseTerminal)}
+        return {'status': 'mechanical_only_not_authorization', 'fixed_passes_per_arm': 3,
+                'arms': [{'arm': arm, 'consumed_ordinals': [r.ordinal for r in starts if r.arm == arm],
+                    'completed_ordinals': [r.ordinal for r in starts if r.arm == arm
+                        and commitment(r) in ends and ends[commitment(r)].outcome == 'completed'],
+                    'aborted_ordinals': [r.ordinal for r in starts if r.arm == arm
+                        and commitment(r) in ends and ends[commitment(r)].outcome == 'aborted'],
+                    'uncertain_ordinals': [r.ordinal for r in starts if r.arm == arm
+                        and commitment(r) not in ends]}
+                    for arm in ('regex', 'frontier', 'base', 'finetuned')]}

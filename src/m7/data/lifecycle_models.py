@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 from pydantic import Field
 
 from m7.contracts import Boundary, Digest, Identifier
+from .timing_models import TimingPhaseConsumed, TimingPhaseTerminal
 
 
 class CustodyActionAuthorization(Boundary):
@@ -128,7 +129,8 @@ class SupersedeReceipt(Boundary):
     superseded_at: str
 
 
-Receipt = FreezeReceipt | SealReceipt | CustodyRelease | OpenReceipt | RevokeReceipt | SupersedeReceipt
+Receipt = (FreezeReceipt | SealReceipt | CustodyRelease | OpenReceipt | RevokeReceipt |
+           SupersedeReceipt | TimingPhaseConsumed | TimingPhaseTerminal)
 
 
 class CustodyEvent(Boundary):
