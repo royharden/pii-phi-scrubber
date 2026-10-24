@@ -10,12 +10,32 @@ from .gate import PublicationDecision
 ARMS = ("regex", "frontier", "base", "finetuned")
 COUNTS = ("corpus_N", "eligible_N", "attempted_N", "answered_N", "error_N", "unattempted_N", "publication_suppressed_N")
 STATUSES = {"measured", "not_measured", "measured_incomplete"}
+COST_STATES = ("known", "partially_known", "unknown", "not_measured")
+INTERVAL_STATES = {"insufficient_units": "insufficient: fewer than 20 effective blocks",
+                   "insufficient_valid_draws": "insufficient: fewer than 1,800 valid draws"}
 
 
 def _number(value: object) -> str:
     if type(value) in (int, float) and isfinite(value):
         return escape(str(value))
     return "not measured"
+
+
+def _interval_state(interval: object) -> str:
+    """Fixed wording; an undefined interval says why instead of looking unmeasured."""
+    if not isinstance(interval, Mapping):
+        return "not measured"
+    bounds = interval.get("interval")
+    if (isinstance(bounds, list) and len(bounds) == 2
+            and all(type(v) in (int, float) and isfinite(v) for v in bounds)):
+        return "defined"
+    reason = interval.get("null_reason")
+    return INTERVAL_STATES.get(reason, "not measured") if isinstance(reason, str) else "not measured"
+
+
+def _cost_state(cost: object) -> str:
+    status = cost.get("status") if isinstance(cost, Mapping) else None
+    return status if isinstance(status, str) and status in COST_STATES else "unknown"
 
 
 def render_report(bundle: Mapping, *, decisions: Sequence[PublicationDecision] = ()) -> str:
@@ -68,7 +88,7 @@ def render_report(bundle: Mapping, *, decisions: Sequence[PublicationDecision] =
         bounds = bounds if isinstance(bounds, list) and len(bounds) == 2 else [None, None]
         return (f"<tr><th>{label}</th><td>{_number(interval.get('effective_blocks'))}</td>"
                 f"<td>{_number(interval.get('valid_draws'))}</td><td>{_number(bounds[0])}</td>"
-                f"<td>{_number(bounds[1])}</td></tr>")
+                f"<td>{_number(bounds[1])}</td><td>{_interval_state(interval)}</td></tr>")
     harm_keys = ("residual_sensitive_codepoints", "records_with_residual", "benign_codepoints_redacted",
                  "benign_record_overredaction", "unavailable", "unsafe_or_unavailable")
     for arm in ARMS:
@@ -112,7 +132,7 @@ def render_report(bundle: Mapping, *, decisions: Sequence[PublicationDecision] =
             "are evidence. Missing values remain unavailable. See detailed locked-edition tables below when supplied.</p>"
             "<p>Intervals below remain unavailable with fewer than 20 effective blocks or 1,800 valid draws. "
             "Development intervals are not held-out evidence.</p><table><tr><th>Measure</th><th>Blocks</th>"
-            "<th>Valid draws</th><th>Lower</th><th>Upper</th></tr>" + "".join(uncertainty) + "</table>"
+            "<th>Valid draws</th><th>Lower</th><th>Upper</th><th>Interval</th></tr>" + "".join(uncertainty) + "</table>"
             "<h2>Safe development examples</h2>" + ("".join(cards) or "<p>No approved examples supplied.</p>")
             + "<h2>Limits</h2><p>English fictional logs only; NAME, EMAIL, PHONE and ACCOUNT_ID. "
             "Offsets address the original decoded Unicode message (maximum 1,024 codepoints). "
@@ -129,6 +149,10 @@ def _locked_details(bundle: Mapping) -> str:
         return '<table><tr>' + ''.join('<th>' + escape(h) + '</th>' for h in headers) + '</tr>' + ''.join(rows) + '</table>'
     def tr(labels, numbers):
         return '<tr>' + ''.join('<th>' + escape(label) + '</th>' for label in labels) + ''.join('<td>' + _number(v) + '</td>' for v in numbers) + '</tr>'
+    def tr_interval(labels, interval):
+        row = tr(labels, [interval.get(k) for k in ('effective_blocks', 'executed_draws', 'valid_draws', 'undefined_draws')]
+                 + list(interval.get('interval') or (None, None)))
+        return row[:-len('</tr>')] + '<td>' + escape(_interval_state(interval)) + '</td></tr>'
     def state(value):
         return 'passed' if value is True else 'failed' if value is False else 'not evaluated'
     output = ['<h2>Locked-edition accounting</h2><p>Failures and unattempted cells remain in the same intended population. '
@@ -148,23 +172,17 @@ def _locked_details(bundle: Mapping) -> str:
             for group in ('NAME', 'EMAIL', 'PHONE', 'ACCOUNT_ID', 'micro', 'macro'):
                 quality = (values.get('per_class', {}).get(group, {}) if group not in ('micro', 'macro') else values.get(group, {}))
                 for metric in ('precision', 'recall', 'f1'):
-                    interval = quality.get(metric) or {}
-                    bounds = interval.get('interval') or (None, None)
-                    interval_rows.append(tr((arm, scope, group, metric), [interval.get(k) for k in
-                        ('effective_blocks', 'executed_draws', 'valid_draws', 'undefined_draws')] + list(bounds)))
+                    interval_rows.append(tr_interval((arm, scope, group, metric), quality.get(metric) or {}))
     output.append('<h2>Absolute paired-block uncertainty</h2><p>2,000 predeclared draws; 95% percentile intervals. '
                   'Fewer than 20 blocks or 1,800 valid draws leaves the interval undefined. Undefined draws are counted.</p>')
-    output.append(table(('Arm', 'Scope', 'Class', 'Metric', 'Blocks', 'Executed', 'Valid', 'Undefined', 'Lower', 'Upper'), interval_rows))
+    output.append(table(('Arm', 'Scope', 'Class', 'Metric', 'Blocks', 'Executed', 'Valid', 'Undefined', 'Lower', 'Upper', 'Interval'), interval_rows))
     pairs = []
     for scope in ('total', 'normal', 'challenge'):
         values = (bundle.get('paired') or {}).get(scope) or {}
         for metric in ('precision', 'recall', 'f1'):
-            interval = values.get('macro', {}).get(metric) or {}
-            bounds = interval.get('interval') or (None, None)
-            pairs.append(tr((scope, 'macro ' + metric), [interval.get(k) for k in
-                         ('effective_blocks', 'executed_draws', 'valid_draws', 'undefined_draws')] + list(bounds)))
+            pairs.append(tr_interval((scope, 'macro ' + metric), values.get('macro', {}).get(metric) or {}))
     output.append('<h2>Fine minus base, same record/block draws</h2>' + table(
-        ('Scope', 'Metric', 'Blocks', 'Executed', 'Valid', 'Undefined', 'Lower', 'Upper'), pairs))
+        ('Scope', 'Metric', 'Blocks', 'Executed', 'Valid', 'Undefined', 'Lower', 'Upper', 'Interval'), pairs))
     harm_keys = ('residual_sensitive_codepoints', 'records_with_residual', 'benign_codepoints_redacted',
                  'benign_record_overredaction', 'unavailable', 'unsafe_or_unavailable')
     harm_rows = []
@@ -206,6 +224,11 @@ def _locked_details(bundle: Mapping) -> str:
                   'each other\'s budget. Verified zero provider cash does not establish zero electricity, amortization '
                   'or total economic cost. Training and inference scopes must both be present.</p>')
     output.append(table(('Measure', 'Value'), [tr((key,), (cost.get(key),)) for key in cost_keys]))
+    output.append('<p>Cost status: ' + _cost_state(cost) + '.</p>')
+    # Same reconciliation condition as the adoption cost gate, not status alone.
+    if not (_cost_state(cost) == 'known' and cost.get('unknown_attempts') == 0 and cost.get('scope_complete') is True
+            and cost.get('over_cap') is False and isinstance(cost.get('currency'), str)):
+        output.append('<p>Cost is not fully known; no total or per-record cost claim is made.</p>')
     currency = cost.get('currency')
     output.append('<p>Currency: ' + (escape(currency) if isinstance(currency, str) and len(currency) == 3 else 'unknown')
                   + '. Complete training/inference scope: ' + state(cost.get('scope_complete'))
@@ -221,7 +244,7 @@ def _locked_details(bundle: Mapping) -> str:
                      'unknown_attempts', 'training_allocation_micros', 'economic_total_micros')
     output.append('<p>Per-arm inference cash below reflects immutable attempt-time receipts. Later global '
                   'invoice reconciliation can be known while an arm allocation remains unknown. No training '
-                  'amortization is invented.</p>' + table(('Arm', *arm_cost_keys), [tr((row['arm'],),
+                  'amortization is invented.</p>' + table(('Arm', 'Status', *arm_cost_keys), [tr((row['arm'], _cost_state(row.get('cost'))),
                   [(row.get('cost') or {}).get(key) for key in arm_cost_keys]) for row in rows]))
     timing = bundle.get('timing') or {}
     timing_rows = []

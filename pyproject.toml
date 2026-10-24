@@ -14,6 +14,9 @@ license = "MIT"
 [project.optional-dependencies]
 dev = ["pytest>=8,<9", "ruff>=0.8,<1"]
 
+[tool.hatch.build]
+exclude = ["*.bak-*"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/m7"]
 
