@@ -5,8 +5,9 @@ from types import SimpleNamespace
 import pytest
 
 from m7.data.corpus import seal_corpus
-from m7.data.lifecycle import CustodyLifecycle, freeze_binding
-from m7.data.lifecycle_models import CustodyActionAuthorization, OpenReceipt
+from m7.data.corpus import normalize_entity_value
+from m7.data.lifecycle import CustodyLifecycle, _states, freeze_binding
+from m7.data.lifecycle_models import CustodyActionAuthorization, CustodyEvent, OpenReceipt
 from m7.data.provenance import commitment
 
 from .custody_fixtures import (
@@ -39,6 +40,7 @@ def released_chain(tmp_path):
                                                  manifest_sha256=manifest_sha256, guard=guard)
     release = lifecycle.release('ed-1', selection_lock=lock, authorization=release_authorization)
     return SimpleNamespace(host=host, lifecycle=lifecycle, bundle=bundle, seal=seal, release=release,
+                           inventory=inventory,
                            edition=edition_for(release, bundle))
 
 
@@ -114,10 +116,10 @@ def supersede(chain, replacement='ed-2'):
 def freeze_successor(chain, inventory, assignments, supersedes='ed-1'):
     successor_plan = plan('ed-2')
     binding = freeze_binding(inventory, successor_plan, assignments, custodian_id=CUSTODIAN,
-                             supersedes_edition_id=supersedes)
+                             supersedes_edition_id=supersedes, predecessor_inventory=chain.inventory)
     return chain.lifecycle.freeze(inventory, successor_plan, assignments, custodian_id=CUSTODIAN,
                                   authorization=action(chain.host, 'ed-2', 'freeze', binding),
-                                  supersedes_edition_id=supersedes)
+                                  supersedes_edition_id=supersedes, predecessor_inventory=chain.inventory)
 
 
 def test_successor_supersedes_without_reopening_predecessor(tmp_path):
@@ -127,6 +129,9 @@ def test_successor_supersedes_without_reopening_predecessor(tmp_path):
     inventory, assignments = sealed_inventory('g2')  # fresh test families, disjoint source pins
     receipt = freeze_successor(chain, inventory, assignments)
     assert receipt.supersedes_edition_id == 'ed-1'
+    # Only the predecessor inventory commitment is recorded; no entity value appears in the receipt.
+    assert receipt.entity_disjoint_from_inventory_sha256 == commitment(chain.inventory)
+    assert 'mira vale' not in receipt.model_dump_json().casefold()
     assert phases(chain.lifecycle) == {'ed-1': 'superseded', 'ed-2': 'frozen'}
     # The superseded predecessor cannot be reopened or resumed; the successor is not released.
     refused('custody_revoked_or_superseded', chain.lifecycle.authorize_open, chain.edition, True)
@@ -138,12 +143,79 @@ def test_successor_supersedes_without_reopening_predecessor(tmp_path):
 def test_successor_reusing_predecessor_inventory_refused(tmp_path):
     chain = released_chain(tmp_path)
     supersede(chain)
-    inventory, assignments = sealed_inventory('g1')  # same families/test sources as ed-1
-    refused('invalid_replacement_inventory', freeze_successor, chain, inventory, assignments)
+    inventory, assignments = sealed_inventory('g1')  # same families, values and sources as ed-1
+    refused('replacement_entity_value_reuse', freeze_successor, chain, inventory, assignments)
     assert phases(chain.lifecycle) == {'ed-1': 'superseded'}
+
+
+def with_lexicon_value(inventory, lexicon_id, value):
+    lexicons = tuple(x.model_copy(update={'values': (value,)}) if x.lexicon_id == lexicon_id else x
+                     for x in inventory.lexicons)
+    return inventory.model_copy(update={'lexicons': lexicons})
+
+
+@pytest.mark.parametrize('reused', [
+    'Mira Vale G1N02',          # exact predecessor test NAME (index 2 is the first test family)
+    '  MIRA   vale\tG1n02 ',    # same after casefold + whitespace collapse/strip
+])
+def test_successor_reusing_one_test_entity_value_refused(tmp_path, reused):
+    chain = released_chain(tmp_path)
+    supersede(chain)
+    inventory, assignments = sealed_inventory('g2')
+    inventory = with_lexicon_value(inventory, 'fam-g2-05-name', reused)
+    refused('replacement_entity_value_reuse', freeze_successor, chain, inventory, assignments)
+    assert chain.lifecycle.inspect()['event_count'] == 4  # freeze, seal, release, supersede
+
+
+def test_predecessor_train_value_is_not_a_test_reuse(tmp_path):
+    # Index 0 is the predecessor's TRAIN family; only held-out (test) values are compared.
+    chain = released_chain(tmp_path)
+    supersede(chain)
+    inventory, assignments = sealed_inventory('g2')
+    inventory = with_lexicon_value(inventory, 'fam-g2-05-name', 'Mira Vale G1N00')
+    assert freeze_successor(chain, inventory, assignments).edition_id == 'ed-2'
+
+
+def test_successor_sharing_a_test_source_pin_refused(tmp_path):
+    # Values fresh, but one test template keeps the predecessor's semantic source hash.
+    chain = released_chain(tmp_path)
+    supersede(chain)
+    inventory, assignments = sealed_inventory('g2')
+    ancestors = tuple(a.model_copy(update={'source_sha256': digest('fam-g1-02-template')})
+                      if a.ancestor_id == 'fam-g2-02-template' else a for a in inventory.ancestors)
+    inventory = inventory.model_copy(update={'ancestors': ancestors})
+    refused('invalid_replacement_inventory', freeze_successor, chain, inventory, assignments)
 
 
 def test_successor_without_supersede_reservation_refused(tmp_path):
     chain = released_chain(tmp_path)
     inventory, assignments = sealed_inventory('g2')
     refused('replacement_edition_reservation_mismatch', freeze_successor, chain, inventory, assignments)
+
+
+def test_successor_without_predecessor_inventory_refused(tmp_path):
+    chain = released_chain(tmp_path)
+    supersede(chain)
+    inventory, assignments = sealed_inventory('g2')
+    refused('predecessor_inventory_required_for_successor_only', freeze_binding, inventory, plan('ed-2'),
+            assignments, custodian_id=CUSTODIAN, supersedes_edition_id='ed-1')
+
+
+def test_replay_rejects_successor_freeze_without_entity_check(tmp_path):
+    chain = released_chain(tmp_path)
+    supersede(chain)
+    inventory, assignments = sealed_inventory('g2')
+    freeze_successor(chain, inventory, assignments)
+    events = chain.lifecycle.journal.events()
+    for forged in (None, commitment(inventory)):  # missing, or checked against the wrong inventory
+        receipt = events[-1].receipt.model_copy(update={'entity_disjoint_from_inventory_sha256': forged})
+        tampered = CustodyEvent(sequence=events[-1].sequence, previous_sha256=events[-1].previous_sha256,
+                                receipt=receipt)
+        refused('replacement_entity_check_mismatch', _states, (*events[:-1], tampered))
+
+
+def test_entity_value_normalization_form():
+    # NFC: "e" + U+0301 composes to U+00E9; casefold; whitespace runs -> one space; ends stripped.
+    raw = '  Jose' + chr(0x301) + chr(9) + chr(10) + ' VALE '
+    assert normalize_entity_value(raw) == 'jos' + chr(0xE9) + ' vale'
+    assert normalize_entity_value('STRASSE') == 'strasse'

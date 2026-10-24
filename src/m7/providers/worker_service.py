@@ -78,7 +78,11 @@ class RemoteLedger:
             raise ValueError("broker_reservation_unavailable")
 
     def reconcile(self, attempt_id: str, *, actual_micros: int | None, state: str,
-                  usage_units: int | None = None, receipt_id: str | None = None) -> None:
+                  usage_units: int | None = None, receipt_id: str | None = None,
+                  compute_seconds: float | None = None) -> None:
+        # Accepted for Ledger protocol parity; ReconcileRequest has no compute field yet,
+        # so the parent ledger keeps compute time unknown (never fabricated).
+        del compute_seconds
         self.rpc_seq += 1
         reply = self._rpc(ReconcileRequest(session_id=self.bootstrap.session_id, seq=self.seq,
             rpc_seq=self.rpc_seq, attempt_id=attempt_id, arm=self.arm, actual_micros=actual_micros,

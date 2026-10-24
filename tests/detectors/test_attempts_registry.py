@@ -55,13 +55,15 @@ class RecordingLedger:
     cap = 100
 
     def __init__(self):
-        self.reserved, self.reconciled = [], []
+        self.reserved, self.reconciled, self.compute = [], [], []
 
     def reserve(self, attempt_id, worst_case_micros, *, category):
         self.reserved.append((attempt_id, worst_case_micros, category))
 
-    def reconcile(self, attempt_id, *, actual_micros, state, usage_units=None, receipt_id=None):
+    def reconcile(self, attempt_id, *, actual_micros, state, usage_units=None, receipt_id=None,
+                  compute_seconds=None):
         self.reconciled.append((attempt_id, actual_micros, state, usage_units))
+        self.compute.append(compute_seconds)
 
 
 def envelope(content, finish_reason="stop"):
@@ -111,6 +113,8 @@ def test_one_transient_failure_then_success_records_two_physical_attempts():
     assert (second.ordinal, second.status, second.input_tokens, second.output_tokens) == (2, "ok", 10, 5)
     # Both attempts are reconciled and retained; usage units 10 + 5 = 15 only on the call that reported usage.
     assert [(state, units) for _, _, state, units in ledger.reconciled] == [("failed", None), ("succeeded", 15)]
+    # Both attempts entered the operation, so each carries a measured, non-negative time proxy.
+    assert len(ledger.compute) == 2 and all(type(s) is float and s >= 0 for s in ledger.compute)
     assert p.attempt_id == second.attempt_id == ledger.reserved[1][0]
     assert p.usage_ref == second.attempt_id
 

@@ -18,6 +18,28 @@ from .provenance import audit_inventory, commitment, family_components
 LABELS = ('NAME', 'EMAIL', 'PHONE', 'ACCOUNT_ID')
 
 
+def normalize_entity_value(value: str) -> str:
+    """The ONE successor-reuse comparison form: NFC, casefold, NFC, whitespace collapsed/stripped.
+
+    Comparison only; never used for offsets, model inputs or any persisted record.
+    """
+    folded = unicodedata.normalize('NFC', unicodedata.normalize('NFC', value).casefold())
+    return re.sub(r'\s+', ' ', folded).strip()
+
+
+def held_out_entity_values(inventory: FamilyInventory) -> frozenset[str]:
+    """Normalized labelled pool values of custodian-private (test) families, in memory only.
+
+    The split audit forces test blocks to hold exactly the custodian_private families.
+    """
+    lexicons = {lexicon.lexicon_id: lexicon for lexicon in inventory.lexicons}
+    return frozenset(normalize_entity_value(value)
+                     for family in inventory.families if family.visibility == 'custodian_private'
+                     for recipe in family.recipes for segment in recipe.segments
+                     if segment.lexicon_id is not None and lexicons[segment.lexicon_id].label is not None
+                     for value in lexicons[segment.lexicon_id].values)
+
+
 def _choice(seed: int, *parts: object, size: int) -> int:
     return int(commitment([seed, *parts]), 16) % size
 

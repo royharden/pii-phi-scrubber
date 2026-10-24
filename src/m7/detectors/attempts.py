@@ -25,7 +25,8 @@ class Ledger(Protocol):
     def reserve(self, attempt_id: str, worst_case_micros: int, *, category: str) -> None: ...
 
     def reconcile(self, attempt_id: str, *, actual_micros: int | None, state: str,
-                  usage_units: int | None = None, receipt_id: str | None = None) -> None: ...
+                  usage_units: int | None = None, receipt_id: str | None = None,
+                  compute_seconds: float | None = None) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -112,7 +113,7 @@ class AttemptController:
             return False  # Never stringify sink failures or repeat a model call.
 
     def _reconcile(self, attempt_id: str, result: AttemptResult | None, *, state: str,
-                   no_physical_call: bool) -> tuple[int | None, str]:
+                   no_physical_call: bool, compute_seconds: float | None = None) -> tuple[int | None, str]:
         receipt = None
         actual = None
         receipt_id = None
@@ -139,7 +140,7 @@ class AttemptController:
         try:
             self.ledger.reconcile(attempt_id, actual_micros=actual,
                                   state=state, usage_units=usage,
-                                  receipt_id=receipt_id)
+                                  receipt_id=receipt_id, compute_seconds=compute_seconds)
         except BaseException:
             # Do not retry the operation because bookkeeping failed. Reserve row
             # survives as unknown; later operator repair uses the physical ID.
@@ -233,6 +234,7 @@ class AttemptController:
                 self._emit(record, diagnostics[-1])
                 break
             physical = False
+            operation_started = None
             result = None
             transient = False
             retry_reason = None
@@ -243,6 +245,7 @@ class AttemptController:
                 if self._cancelled():
                     raise AdapterFault("cancelled")
                 physical = True  # Conservatively entered; transport may have sent.
+                operation_started = perf_counter()
                 result = operation(attempt_id)
                 if not isinstance(result, AttemptResult):
                     result = None
@@ -273,8 +276,11 @@ class AttemptController:
                 final = self._failure(record, attempt_id, "cancelled")
             state = ("succeeded" if final.status == "ok" else
                      "cancelled" if final.status == "cancelled" else "failed")
+            # Measured wall time of the entered operation only (a time proxy, not billing);
+            # None when no operation was entered.
+            compute = None if operation_started is None else max(0.0, perf_counter() - operation_started)
             actual, liability = self._reconcile(attempt_id, result, state=state,
-                                                no_physical_call=not physical)
+                                                no_physical_call=not physical, compute_seconds=compute)
             elapsed = (perf_counter() - started) * 1000
             diagnostics.append(AttemptDiagnostic(attempt_id, ordinal, final.status, final.error_code,
                 elapsed, None if result is None else result.input_tokens,

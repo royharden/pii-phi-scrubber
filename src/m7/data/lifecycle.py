@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from .corpus import verify_bundle
+from .corpus import held_out_entity_values, verify_bundle
 from .custody_journal import CustodyJournal
 from .lifecycle_models import (
     CustodyActionAuthorization, CustodyRelease, FreezeReceipt, OpenReceipt,
@@ -37,11 +37,21 @@ def population(bundle: CorpusBundle) -> list[dict[str, str]]:
 
 def freeze_binding(inventory: FamilyInventory, plan: CorpusPlan,
                    assignments: tuple[BlockAssignment, ...], *, custodian_id: str,
-                   supersedes_edition_id: str | None = None) -> dict:
-    """Pure authorization payload. No generation, journal write or approval occurs."""
+                   supersedes_edition_id: str | None = None,
+                   predecessor_inventory: FamilyInventory | None = None) -> dict:
+    """Pure authorization payload. No generation, journal write or approval occurs.
+
+    A successor needs the predecessor inventory (custodian-held) so test entity values
+    can be compared in memory; only that inventory's commitment enters the payload.
+    """
+    if (supersedes_edition_id is None) != (predecessor_inventory is None):
+        raise ValueError('predecessor_inventory_required_for_successor_only')
     audit = audit_inventory(inventory, assignments, plan)
     if audit.status != 'mechanical_only':
         raise ValueError('cannot_freeze_blocked_inventory')
+    if predecessor_inventory is not None and (
+            held_out_entity_values(inventory) & held_out_entity_values(predecessor_inventory)):
+        raise ValueError('replacement_entity_value_reuse')
     families = {family.family_id: family for family in inventory.families}
     test_families = [families[f] for block in assignments if block.split == 'test' for f in block.family_ids]
     if any(family.author_id != custodian_id for family in test_families):
@@ -65,7 +75,9 @@ def freeze_binding(inventory: FamilyInventory, plan: CorpusPlan,
             'test_semantic_source_pins': tuple(sorted({ancestors[a].source_sha256 for a in seen})),
             'split_seed': plan.split_seed, 'sampling_seed': plan.sampling_seed,
             'benign_fraction': plan.benign_fraction, 'challenge_fraction': plan.challenge_fraction,
-            'supersedes_edition_id': supersedes_edition_id}
+            'supersedes_edition_id': supersedes_edition_id,
+            'entity_disjoint_from_inventory_sha256': (None if predecessor_inventory is None
+                                                      else commitment(predecessor_inventory))}
 
 
 @dataclass
@@ -109,6 +121,10 @@ def _states(events) -> dict[str, _State]:
                         or prior.freeze.inventory_sha256 == receipt.inventory_sha256
                         or set(prior.freeze.test_semantic_source_pins) & set(receipt.test_semantic_source_pins)):
                     raise ValueError('invalid_replacement_inventory')
+                if receipt.entity_disjoint_from_inventory_sha256 != prior.freeze.inventory_sha256:
+                    raise ValueError('replacement_entity_check_mismatch')
+            elif receipt.entity_disjoint_from_inventory_sha256 is not None:
+                raise ValueError('replacement_entity_check_mismatch')
             states[receipt.edition_id] = _State(freeze=receipt)
             continue
         if state is None:
@@ -207,9 +223,11 @@ class CustodyLifecycle:
     def freeze(self, inventory: FamilyInventory, plan: CorpusPlan,
                assignments: tuple[BlockAssignment, ...], *, custodian_id: str,
                authorization: CustodyActionAuthorization,
-               supersedes_edition_id: str | None = None) -> FreezeReceipt:
+               supersedes_edition_id: str | None = None,
+               predecessor_inventory: FamilyInventory | None = None) -> FreezeReceipt:
         core = freeze_binding(inventory, plan, assignments, custodian_id=custodian_id,
-                              supersedes_edition_id=supersedes_edition_id)
+                              supersedes_edition_id=supersedes_edition_id,
+                              predecessor_inventory=predecessor_inventory)
         with self.journal.writer():
             events = self.journal.events()
             self._action(authorization, plan.edition_id, 'freeze', core)

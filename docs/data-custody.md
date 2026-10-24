@@ -165,7 +165,19 @@ rewrites by an OS user with custody rights; protect and back up the root externa
    the future operating host. `supersede(old,new,authorization=...)` retires the old
    edition and reserves a never-used successor ID. Its later freeze must use fresh
    private test semantic sources; merely changing seeds/labels/IDs cannot reset the
-   holdout. Histories and prior failures remain intact.
+   holdout. Histories and prior failures remain intact. The successor freeze also
+   requires `predecessor_inventory=` (the custodian already holds it): every labelled
+   pool value of the successor's custodian-private test families is compared, in
+   memory only, with the predecessor's, and any overlap refuses the freeze with
+   `replacement_entity_value_reuse`. The single comparison form is
+   `m7.data.corpus.normalize_entity_value`: Unicode NFC, casefold, NFC again (caseless
+   matching), then every whitespace run collapsed to one space and the ends stripped. It is never used for
+   offsets, model inputs or stored records. The FreezeReceipt records only
+   `entity_disjoint_from_inventory_sha256`, the commitment of the predecessor
+   inventory that was checked; journal replay requires it to equal the superseded
+   edition's frozen `inventory_sha256` (and to be absent for a first edition). No
+   entity value or value hash enters any receipt. This is an exact-value check after
+   normalization, not a near-duplicate or alias detector.
 
 Receipts remain narrow and value-free. They do not issue an independent verdict.
 Corpus manifests retain `independent_audit='pending'` and `custody_accepted=false`;

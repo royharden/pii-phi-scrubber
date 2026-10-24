@@ -38,6 +38,9 @@ class FreezeReceipt(Boundary):
     authorization_sha256: Digest
     frozen_at: str
     supersedes_edition_id: Identifier | None = None
+    # Successors only: the predecessor inventory whose test entity values were checked
+    # disjoint at freeze. A commitment to the inventory, never values or value hashes.
+    entity_disjoint_from_inventory_sha256: Digest | None = None
 
 
 class SealReceipt(Boundary):
