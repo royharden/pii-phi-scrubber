@@ -255,10 +255,11 @@ def normalize_timing_cash_snapshot(*, snapshot_id: str, schedule: TimingResource
 
 
 def validate_timing_resources(bundle: WorkerLaunchBundle, plan: IsolatedTimingPlan,
-                              schedule: TimingResourceSchedule) -> dict:
+                              schedule: TimingResourceSchedule, *,
+                              clock: Callable[[], datetime] = now_utc) -> dict:
     """Definition-only validation; no snapshot/native/receipt queries or measurements."""
     plan = _plan(plan)
-    validate_launch_bundle(bundle)
+    validate_launch_bundle(bundle, clock=clock)
     spec = bundle.campaign
     expected = build_timing_resource_schedule(plan, policies=spec.policies, budget=spec.budget)
     if (schedule != expected or plan.sha256 != spec.timing_plan_sha256 or
@@ -300,7 +301,7 @@ class TimingResourceAuthority:
         from m7.experiment.timing_contracts import PrimaryAccountingReceipt
         primary = PrimaryAccountingReceipt.model_validate_json(primary.model_dump_json())
         plan = _plan(plan)
-        validate_timing_resources(self.bundle, plan, self.schedule)
+        validate_timing_resources(self.bundle, plan, self.schedule, clock=self.clock)
         auth = self.authorization
         if (self._primary is not None and self._primary.sha256 != primary.sha256 or
                 auth.bundle_sha256 != self.bundle.sha256 or auth.campaign_sha256 != self.bundle.campaign_sha256 or
@@ -452,12 +453,13 @@ class PreparedTimingResources:
     receipt: TimingHandoffPreparation
 
 
-def validate_timing_handoff(handoff: TimingResourcesHandoff) -> dict:
+def validate_timing_handoff(handoff: TimingResourcesHandoff, *,
+                            clock: Callable[[], datetime] = now_utc) -> dict:
     from m7.experiment.timing_contracts import IsolatedTimingPlan, PrimaryAccountingReceipt
     handoff = TimingResourcesHandoff.model_validate_json(handoff.model_dump_json())
     plan = IsolatedTimingPlan.model_validate_json(json.dumps(handoff.plan, allow_nan=False))
     primary = PrimaryAccountingReceipt.model_validate_json(json.dumps(handoff.primary, allow_nan=False))
-    result = validate_timing_resources(handoff.bundle, plan, handoff.schedule)
+    result = validate_timing_resources(handoff.bundle, plan, handoff.schedule, clock=clock)
     auth = handoff.authorization
     if (auth.schedule_sha256 != handoff.schedule.sha256 or auth.bundle_sha256 != handoff.bundle.sha256 or
             auth.campaign_sha256 != handoff.bundle.campaign_sha256 or auth.primary_accounting_sha256 != primary.sha256 or
@@ -477,7 +479,7 @@ def prepare_timing_handoff(handoff: TimingResourcesHandoff, *, host: CampaignHos
     """Explicit future host qualification, never calls a session/phase or D4 open."""
     from m7.experiment.timing_contracts import IsolatedTimingPlan, PrimaryAccountingReceipt
     handoff = TimingResourcesHandoff.model_validate_json(handoff.model_dump_json())
-    validate_timing_handoff(handoff)
+    validate_timing_handoff(handoff, clock=clock)
     if host is None or snapshot_provider is None:
         raise ValueError("timing_real_host_and_cash_snapshot_required")
     authenticate(host.verify_receipt, "timing_resources_handoff", handoff.sha256)
