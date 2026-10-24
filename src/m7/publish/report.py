@@ -21,6 +21,24 @@ def _number(value: object) -> str:
     return "not measured"
 
 
+def _metric(value: object) -> str:
+    """A ratio cell. A zero denominator reads N/A with its fraction; a cell that
+    never ran stays "not measured". Neither is ever shown as 0 or 1."""
+    if not isinstance(value, Mapping):
+        return _number(value)
+    if type(value.get("value")) in (int, float) and isfinite(value["value"]):
+        return _number(value["value"])
+    reason = value.get("null_reason")
+    numerator, denominator = value.get("numerator"), value.get("denominator")
+    if (reason == "zero_denominator" and denominator == 0 and type(numerator) is int
+            and type(denominator) is int):
+        return f"N/A ({numerator}/{denominator})"
+    defined, count = value.get("defined_classes"), value.get("class_count")
+    if reason == "undefined_class" and type(defined) is int and type(count) is int:
+        return f"N/A ({defined}/{count} classes defined)"
+    return "not measured"
+
+
 def _interval_state(interval: object) -> str:
     """Fixed wording; an undefined interval says why instead of looking unmeasured."""
     if not isinstance(interval, Mapping):
@@ -77,7 +95,7 @@ def render_report(bundle: Mapping, *, decisions: Sequence[PublicationDecision] =
                        if group not in ("micro", "macro") else values.get(group, {}))
             quality = quality if isinstance(quality, dict) else {}
             result.append(f"<tr><th>{arm}</th><td>{scope}</td><td>{group}</td>" + "".join(
-                f"<td>{_number(quality.get(key, {}).get('value') if isinstance(quality.get(key), dict) else quality.get(key))}</td>"
+                f"<td>{_metric(quality.get(key))}</td>"
                 for key in keys) + "</tr>")
         return result
     harms = []
@@ -106,7 +124,7 @@ def render_report(bundle: Mapping, *, decisions: Sequence[PublicationDecision] =
         for key in harm_keys:
             value = values.get(key, {})
             value = value if isinstance(value, dict) else {}
-            harms.append(f"<tr><th>{arm}</th><td>{key}</td><td>{_number(value.get('value'))}</td>"
+            harms.append(f"<tr><th>{arm}</th><td>{key}</td><td>{_metric(value)}</td>"
                          f"<td>{_number(value.get('numerator'))}</td><td>{_number(value.get('denominator'))}</td></tr>")
     uncertainty.append(interval_row("finetuned minus base macro F1", bundle.get("paired_fine_minus_base")))
     qualification = ("Locked-edition execution report. Independent product acceptance remains pending."
@@ -123,7 +141,10 @@ def render_report(bundle: Mapping, *, decisions: Sequence[PublicationDecision] =
             "compliance certification is claimed. Negative results and failures are valid outcomes.</p>"
             "<h2>Coverage and failures</h2><table><tr><th>Arm</th><th>Status</th>"
             + "".join(f"<th>{key}</th>" for key in COUNTS) + "</tr>" + "".join(rows)
-            + "</table><h2>Quality</h2><p>Null and absent values mean not measured, never zero.</p>"
+            + "</table><h2>Quality</h2><p>N/A (numerator/denominator) marks an undefined metric "
+            "with a zero denominator; a macro N/A counts the classes that are defined. "
+            "Not measured marks a value that is unavailable: never run, not reconciled "
+            "or not computed. Neither is ever zero.</p>"
             "<table><tr><th>Arm</th><th>Slice</th><th>Class</th>" + "".join(f"<th>{key}</th>" for key in keys)
             + "</tr>" + "".join(metrics) + "</table><h2>Leaks, overredaction and availability</h2>"
             "<table><tr><th>Arm</th><th>Measure</th><th>Value</th><th>Numerator</th><th>Denominator</th></tr>"
@@ -194,8 +215,12 @@ def _locked_details(bundle: Mapping) -> str:
             for key in harm_keys:
                 point = metrics.get(key) or {}
                 ci = uncertainty.get(key) or {}
-                harm_rows.append(tr((row['arm'], scope, key), [point.get(k) for k in ('value', 'numerator', 'denominator')]
-                                   + list(ci.get('interval') or (None, None))))
+                # The value cell may read N/A (0/0) rather than a number.
+                harm_rows.append('<tr>' + ''.join('<th>' + escape(label) + '</th>' for label in (row['arm'], scope, key))
+                                 + '<td>' + _metric(point) + '</td>'
+                                 + ''.join('<td>' + _number(v) + '</td>' for v in
+                                           [point.get('numerator'), point.get('denominator'),
+                                            *(ci.get('interval') or (None, None))]) + '</tr>')
     for scope in ('total', 'normal', 'challenge'):
         values = (bundle.get('paired') or {}).get(scope) or {}
         for group in ('NAME', 'EMAIL', 'PHONE', 'ACCOUNT_ID', 'micro'):
@@ -213,7 +238,9 @@ def _locked_details(bundle: Mapping) -> str:
         diagnostic = row.get('successful_only') or {}
         for group in ('micro', 'macro'):
             quality = diagnostic.get(group) or {}
-            secondary.append(tr((row['arm'], group), [quality.get(m, {}).get('value') for m in ('precision', 'recall', 'f1')]))
+            secondary.append('<tr><th>' + escape(row['arm']) + '</th><th>' + group + '</th>'
+                             + ''.join('<td>' + _metric(quality.get(m)) + '</td>' for m in ('precision', 'recall', 'f1'))
+                             + '</tr>')
     output.append('<h2>Successful-only diagnostics (secondary)</h2>' + table(('Arm', 'Metric', 'Precision', 'Recall', 'F1'), secondary))
     cost = bundle.get('cost') or {}
     cost_keys = ('attempts_N', 'known_provider_cash_micros', 'provider_cash_total_micros',

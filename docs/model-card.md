@@ -24,8 +24,10 @@ not be changed after observing failures.
 
 Evaluation source uses exact `(start,end,label)` matches before render unions. Partial
 overlaps and wrong labels receive no exact credit. Failure and unavailable records
-remain in the intended population. Entirely unrun arms have null metrics. Undefined
-classes and insufficient bootstrap units remain null. Normal/challenge comparisons
+remain in the intended population. Entirely unrun arms have null metrics (reported
+as `not measured`). Undefined classes remain null (`N/A` with numerator/denominator; an
+undefined macro shows how many classes are defined)
+and insufficient bootstrap units leave intervals undefined (`insufficient` where the report has an Interval column). Normal/challenge comparisons
 do not isolate template novelty from entity novelty. Costs/timing are unmeasured.
 
 Source now implements those future reports: unconditional and successful-only

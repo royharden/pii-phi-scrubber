@@ -40,3 +40,15 @@ approved warm phase/reset contract exists; cached replies and cold respawns are 
 substituted. Real native launch/control verification, actual frontier worker factory,
 provider/model permits and all runtime/import/OS/DB/stdio/financial/crash behavior
 remain unverified. No product has been accepted or deployed.
+
+Claude test rounds, 2026-10-23/24: a hand-derived pytest tree was written under
+`tests/` (see the README "Tests" section). It has not been run, and no product
+import took place; the reported checks were syntax parsing, diff inspection and
+static review. Source fixes found while deriving cases include the renderer's
+rejection of an empty rendered message as `invalid_structure` and regex EMAIL
+punctuation handling; report wording for insufficient intervals, cost status and
+`N/A (0/0)` for zero denominators as distinct from `not measured`; and the
+reservation ledger's `amount_source`. This list is not exhaustive: other training,
+recovery, ledger, custody, detector and contract fixes from these rounds are
+recorded in the commit history. Their behavior is
+equally unverified until the suite runs.

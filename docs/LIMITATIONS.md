@@ -1,7 +1,8 @@
 # Limits and unresolved evidence
 
-Runtime is unverified. No tests, model inference, training, controlled timing, sealed
-evaluation or independent product acceptance occurred during source construction.
+Runtime is unverified. A hand-derived test suite exists under `tests/` but has never
+been run. No model inference, training, controlled timing, sealed evaluation or
+independent product acceptance occurred during source construction.
 
 Only English fictional NAME, EMAIL, PHONE and ACCOUNT_ID in one decoded JSON message
 are supported. Offsets use Python Unicode codepoints without normalization. The bound
@@ -18,6 +19,12 @@ privacy for arbitrary text. It does not replace independent annotation or safe c
 Small hand-authored development examples cannot establish statistical power, general
 privacy performance or separate causal gains from entity versus template novelty.
 Unmeasured arms, absent costs and insufficient cluster intervals are unknown, not zero.
+The report labels them `not measured`, `unknown` and `insufficient`; a metric with a
+zero denominator reads `N/A (0/0)`. The adoption floor table still shows an
+undefined fine-tuned precision, recall or lower recall bound as `not measured`,
+because the adoption rule stores no numerator or denominator. The harm-rate
+Lower95/Upper95 columns and the paired class/micro difference table have no
+interval-state column, so an insufficient interval there also reads `not measured`.
 Fine-tuning can lose to the baseline; no model improvement is promised.
 
 The mechanical split auditor checks only declared ancestor tokens and components.

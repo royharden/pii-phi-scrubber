@@ -7,14 +7,24 @@ Row shapes follow render_report: coverage columns are corpus, eligible, attempte
 answered, error, unattempted, publication_suppressed; quality columns are
 precision, recall, f1, tp, fp, fn, support.
 """
+import json
+
+import pytest
+
+from m7.contracts import Span, make_record
+from m7.experiment.costing import cost_report
+from m7.experiment.executor import aggregate_edition
+from m7.experiment.journal import AttemptSummary, CellResult
 from m7.experiment.result import public_aggregate
 from m7.publish import gate_record, render_report, write_locked_artifacts
 from m7.render import render
 
-from .scenario import (EMAIL_VALUE, GOLD, MESSAGES, NAME_VALUE, bundle, mixed_cells, prediction, record,
-                       records, regex_only_cells)
+from .scenario import (EMAIL_VALUE, GOLD, MESSAGES, NAME_SPAN, NAME_VALUE, arm, bundle, edition, gold_channel,
+                       mixed_cells, prediction, record, records, regex_only_cells)
 
 NM = '<td>not measured</td>'
+# Plan: a zero denominator is N/A with numerator/denominator, distinct from never-run cells.
+NA = '<td>N/A (0/0)</td>'
 INSUFFICIENT = 'insufficient: fewer than 20 effective blocks'
 
 
@@ -35,15 +45,18 @@ def test_partially_failed_arm_shows_failures_inside_full_denominator():
             + cells(21 / 34, 21, 34) + '</tr>') in document
 
 
-def test_null_metrics_and_empty_class_render_as_not_measured_never_zero():
+def test_zero_denominator_and_empty_class_render_as_na_never_zero():
     document = html()
-    # PHONE has no gold or predictions: 0/0 ratios; integer counts stay 0.
-    assert ('<tr><th>regex</th><td>total</td><td>PHONE</td>' + NM * 3 + cells(0, 0, 0, 0) + '</tr>') in document
-    # Macro is undefined while any class is undefined; it has no counts either.
-    assert '<tr><th>regex</th><td>total</td><td>macro</td>' + NM * 7 + '</tr>' in document
-    # No benign-only records exist: 0/0 overredaction rate.
-    assert '<tr><th>regex</th><td>benign_record_overredaction</td>' + NM + cells(0, 0) + '</tr>' in document
-    assert 'Null and absent values mean not measured, never zero.' in document
+    # PHONE has no gold or predictions: precision 0/(0+0), recall 0/(0+0), f1 0/(0+0+0).
+    assert ('<tr><th>regex</th><td>total</td><td>PHONE</td>' + NA * 3 + cells(0, 0, 0, 0) + '</tr>') in document
+    # Macro needs all four classes; regex defines NAME and EMAIL only (2 of 4). Macro has no counts.
+    assert ('<tr><th>regex</th><td>total</td><td>macro</td>' + '<td>N/A (2/4 classes defined)</td>' * 3
+            + NM * 4 + '</tr>') in document
+    # No benign-only records exist: overredaction rate 0/0.
+    assert '<tr><th>regex</th><td>benign_record_overredaction</td>' + NA + cells(0, 0) + '</tr>' in document
+    # Successful-only diagnostics (both regex records answered) use the same wording.
+    assert '<tr><th>regex</th><th>macro</th>' + '<td>N/A (2/4 classes defined)</td>' * 3 + '</tr>' in document
+    assert 'Not measured marks a value that is unavailable' in document
 
 
 def test_unrun_arm_renders_not_measured_and_keeps_its_records():
@@ -57,8 +70,8 @@ def test_arm_losing_to_regex_is_shown_with_no_deployment():
     document = html()
     # regex NAME: tp 1 -> precision 1/1, recall 1/1, f1 2/2.
     assert '<tr><th>regex</th><td>total</td><td>NAME</td>' + cells(1.0, 1.0, 1.0, 1, 0, 0, 1) + '</tr>' in document
-    # finetuned NAME: tp 0, fp 0, fn 1 -> precision 0/0 null, recall 0/1 = 0.0, f1 0/1 = 0.0.
-    assert ('<tr><th>finetuned</th><td>total</td><td>NAME</td>' + NM + cells(0.0, 0.0, 0, 0, 1, 1)
+    # finetuned NAME: tp 0, fp 0, fn 1 -> precision 0/0 = N/A, recall 0/1 = 0.0, f1 0/1 = 0.0.
+    assert ('<tr><th>finetuned</th><td>total</td><td>NAME</td>' + NA + cells(0.0, 0.0, 0, 0, 1, 1)
             + '</tr>') in document
     assert 'Retain the benchmark and recommend no deployment' in document
     assert 'Candidate for independent review.' not in document
@@ -114,7 +127,7 @@ def test_leaked_record_is_suppressed_from_report_but_still_scored():
     # Suppression is counted (finetuned suppressed 1) but the record stays answered
     # with no error, and the NAME miss is still scored (fn 1).
     assert '<tr><th>finetuned</th><td>measured</td>' + cells(2, 2, 2, 2, 0, 0, 1) + '</tr>' in document
-    assert ('<tr><th>finetuned</th><td>total</td><td>NAME</td>' + NM + cells(0.0, 0.0, 0, 0, 1, 1)
+    assert ('<tr><th>finetuned</th><td>total</td><td>NAME</td>' + NA + cells(0.0, 0.0, 0, 0, 1, 1)
             + '</tr>') in document
 
 
@@ -135,3 +148,84 @@ def test_published_artifacts_carry_no_message_or_gold_text(tmp_path):
         for value in (*MESSAGES.values(), NAME_VALUE, EMAIL_VALUE, 'mirela', 'Quandt'):
             assert value not in text
     assert '<p>Cost status: unknown.</p>' in (tmp_path / 'out' / 'index.html').read_text(encoding='utf-8')
+
+
+def attempt(attempt_id, reservation, actual):
+    """One physical attempt; actual None means the billed amount is still unknown."""
+    return AttemptSummary(attempt_id=attempt_id, ordinal=1, status='ok' if actual is not None else 'failed',
+                          error_code=None if actual is not None else 'backend_failure', duration_ms=1.0,
+                          input_tokens=None, output_tokens=None, reservation_micros=reservation,
+                          actual_micros=actual, liability_status='known' if actual is not None else 'unknown',
+                          retry_reason=None, physical_may_have_started=True)
+
+
+def zeros():
+    return {key: 0 for key in ('attempts_N', 'known_provider_cash_micros', 'unresolved_liability_micros',
+                               'unknown_attempts', 'known_usage_units', 'unknown_usage_attempts')}
+
+
+# Campaign ledger: 3 inference attempts, 2 succeeded with 200 known cash, 1 unknown
+# holding a 50 liability. Remaining = 1000 - 200 - 50 = 750; 250 <= 1000 so no overrun.
+PARTIAL_SUMMARY = {
+    'cap_micros': 1000, 'known_provider_cash_micros': 200, 'unresolved_liability_micros': 50,
+    'unknown_attempts': 1, 'remaining_micros': 750, 'attempts_N': 3, 'currency': 'USD',
+    'by_category': {'training': zeros(), 'retry': zeros(), 'failed_trial': zeros(),
+                    'inference': {**zeros(), 'attempts_N': 3, 'known_provider_cash_micros': 200,
+                                  'unresolved_liability_micros': 50, 'unknown_attempts': 1}},
+    'states': {'reserved': 0, 'succeeded': 2, 'failed': 0, 'cancelled': 0, 'unknown': 1}}
+
+
+def test_partially_known_cost_stays_partial_and_blocks_cost_claims():
+    grid = mixed_cells()
+    # frontier: rec-001 billed 80 of a 100 reservation; rec-002 failed with its 100 still unresolved.
+    grid[('frontier', 'rec-001')] = CellResult(
+        arm='frontier', record_id='rec-001', content_sha256=record('rec-001').content_sha256, attempted=True,
+        outcome='answered', prediction=prediction('frontier', 'rec-001', (NAME_SPAN,)),
+        attempts=(attempt('f-1', 100, 80),))
+    grid[('frontier', 'rec-002')] = CellResult(
+        arm='frontier', record_id='rec-002', content_sha256=record('rec-002').content_sha256, attempted=True,
+        outcome='backend_failure', attempts=(attempt('f-2', 100, None),))
+    raw = aggregate_edition(edition(), records(), gold_channel(), grid, closed=True,
+                            cost=cost_report(PARTIAL_SUMMARY))
+    document = render_report(public_aggregate(raw))
+    assert '<p>Cost status: partially_known.</p>' in document
+    assert 'no total or per-record cost claim is made' in document
+    assert '<tr><th>known_provider_cash_micros</th><td>200</td></tr>' in document
+    assert '<tr><th>unresolved_liability_micros</th><td>50</td></tr>' in document
+    assert '<tr><th>remaining_micros</th><td>750</td></tr>' in document
+    # A partial ledger never gets a provider cash total.
+    assert '<tr><th>provider_cash_total_micros</th>' + NM + '</tr>' in document
+    assert 'Authorization overrun: no.' in document
+    # Per-arm: known cash 80, no total, liability 100, 1 unknown attempt, no allocation or economic total.
+    assert ('<tr><th>frontier</th><th>partially_known</th>' + cells(80) + NM + cells(100, 1) + NM * 2
+            + '</tr>') in document
+    assert '<tr><th>cost_reconciled</th><td>failed</td></tr>' in document
+
+
+def test_collision_with_report_text_suppresses_the_whole_artifact_set(tmp_path):
+    # Fictional source whose NAME coincides with fixed report text.
+    # 'user ' = 5; 'Locked-edition accounting' = 14 + 1 + 10 = 25 -> NAME [5, 30).
+    source = make_record('user Locked-edition accounting signed in', 'rec-collide')
+    sources = ((source, (Span(start=5, end=30, label='NAME'),)),)
+    raw = bundle(mixed_cells())
+    status = write_locked_artifacts(raw, tmp_path / 'out', sources=sources)
+    assert status == {'status': 'artifacts_suppressed', 'product_acceptance': False}
+    aggregate = json.loads((tmp_path / 'out' / 'aggregate.json').read_text(encoding='utf-8'))
+    assert aggregate == {'schema_version': 'ArtifactSuppressed/v1', 'status': 'suppressed',
+                         'reason': 'assembled_value_detected', 'artifact_assembly_failures_N': 1}
+    index = (tmp_path / 'out' / 'index.html').read_text(encoding='utf-8')
+    assert '<h1>Output suppressed</h1>' in index and 'Locked-edition accounting' not in index
+    # Upstream measurements are not changed by suppression.
+    assert arm(raw, 'base')['publication_suppressed_N'] == 2
+    assert arm(raw, 'finetuned')['metrics']['per_class']['NAME']['fn'] == 1
+
+
+def test_unsafe_suppression_card_writes_nothing(tmp_path):
+    # 'Gold-aware' is fixed text in BOTH the main report Limits paragraph and the
+    # suppression card, so the first scan rejects the report and the second the card.
+    # 'user ' = 5; 'Gold-aware' = 4 + 1 + 5 = 10 -> NAME [5, 15).
+    source = make_record('user Gold-aware here', 'rec-card')
+    sources = ((source, (Span(start=5, end=15, label='NAME'),)),)
+    with pytest.raises(ValueError, match='suppression_card_not_safe_to_publish'):
+        write_locked_artifacts(bundle(mixed_cells()), tmp_path / 'out', sources=sources)
+    assert not (tmp_path / 'out').exists()

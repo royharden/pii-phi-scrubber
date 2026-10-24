@@ -1,7 +1,9 @@
 # Offline two-minute journey
 
-Source only: no rehearsal or measured four-arm report has occurred. After Dirty Mode
-closes, validate the environment and the following behavior before claiming a demo.
+Source only: no rehearsal or measured four-arm report has occurred, and the
+development report itself has never been generated. Tests for the gate, suppression
+and report paths exist under `tests/` but have not been run. After Dirty Mode closes,
+validate the environment and the following behavior before claiming a demo.
 
 The development path runs only the public fictional fixture. Its eight examples are
 one development block. Regex is a deterministic baseline; frontier/base/fine remain

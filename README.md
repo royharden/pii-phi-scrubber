@@ -1,7 +1,8 @@
 # M7 synthetic-log redaction experiment
 
-Source construction is complete for the currently assigned implementation scope;
-**runtime and scientific outcomes remain unverified**. Nothing in this checkout
+Source is written for the assigned implementation packages. The trusted operator
+host and the real receipt, native-isolation and provider services it depends on are
+not part of this checkout, and **runtime and scientific outcomes remain unverified**. Nothing in this checkout
 establishes actual training, model inference, sealed evaluation, timing, spending,
 privacy protection or product acceptance. A negative measured result is valid.
 
@@ -207,6 +208,33 @@ This never reopens held-out data or calls a model. Regenerating artifacts with a
 renderer requires custody/gold-aware validation again. See [demo](docs/demo.md),
 [model card](docs/model-card.md), [limits](docs/LIMITATIONS.md) and
 [construction status](docs/CONSTRUCTION.md).
+
+## Tests
+
+`tests/` holds pytest source for contracts, rendering, scoring/bootstrap, the
+reservation ledger, the offline runner, detectors, providers, training, corpus
+custody data, the experiment journal and result projection, publication gates and
+the static report.
+Expected values are derived by hand from the plan and contracts and the derivation
+is written beside each case. **None of these tests has ever been run**, and no
+product import has happened. A first-run failure must be traced against the plan
+before either the code or the expectation is changed. To run them later, in a
+locked Python 3.12 + Pydantic 2 + pytest 8 environment, from this directory:
+
+```powershell
+pytest
+```
+
+`pyproject.toml` sets `pythonpath = ["src"]` and `testpaths = ["tests"]`. Paths
+that need a real model, provider or native host are exercised only through
+injected stubs (success and fail-closed branches), so a passing suite would not
+establish those integrations. Ledger tests use a local temporary SQLite file.
+
+In reports, `N/A (n/d)` marks an undefined metric with a zero denominator (macro:
+`N/A (d/c classes defined)`), `insufficient` (in an Interval column) an interval
+with fewer than 20 blocks or 1,800 valid draws, `unknown` a cost status that is not reconciled, and
+`not measured` any value that is unavailable (never run, not reconciled or not
+computed). None is zero.
 
 ## Still required
 
