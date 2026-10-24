@@ -1,6 +1,7 @@
 """Stopped-worker accounting recovery. Never restarts training or rewrites history."""
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 import sqlite3
@@ -10,7 +11,7 @@ from pydantic import model_validator
 
 from m7.contracts import Boundary, Digest, Identifier
 from m7.ledger import ReservationLedger
-from .artifacts import file_sha256, load_object, no_links
+from .artifacts import file_sha256, load_object, no_links, tree_sha256
 from .executor import _write_json
 from .selection import authenticate, Verifier
 from .validation import digest, now_utc, training_attempt_id, utc, validate_training_outcome, validate_training_plan
@@ -72,7 +73,7 @@ def recover_training_run(plan: dict, permit: dict, *, root: Path,
     if db_path.exists():
         # Read before reconciliation so a known late invoice is never erased by
         # an older unknown-cost outcome. URI read-only forbids accidental creation.
-        with sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True) as db:
+        with closing(sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
             if db.execute("SELECT id,cap FROM authorization").fetchall() != [(permit["authorization_id"], permit["cap_micros"])]:
                 raise ValueError("recovery_ledger_authority_mismatch")
             attempts = {row[0]: row[1:] for row in db.execute(
@@ -80,6 +81,18 @@ def recover_training_run(plan: dict, permit: dict, *, root: Path,
     expected = {training_attempt_id(digest(plan), t["trial_id"]) for t in plan["trials"]}
     if set(attempts) - expected:
         raise ValueError("recovery_ledger_unplanned_attempts")
+    # If the original run closed, its run.json holds the exact receipts it wrote.
+    # A structurally valid receipt.json that differs from that copy was altered.
+    run_path = run_dir / "run.json"
+    no_links(run_path)
+    closed_receipts = None
+    if run_path.exists():
+        closed = load_object(run_path)
+        if (closed.get("schema_version") != "TrainingRun/v2" or closed.get("plan_sha256") != digest(plan) or
+                closed.get("edition_id") != plan["edition_id"] or closed.get("permit_sha256") != digest(permit) or
+                type(closed.get("receipts")) is not list):
+            raise ValueError("recovery_run_closeout_mismatch")
+        closed_receipts = {r.get("trial_id"): r for r in closed["receipts"] if type(r) is dict}
     rows = []
     ledger = ReservationLedger(db_path, cap_micros=permit["cap_micros"], authorization_id=permit["authorization_id"])
     if db_path.exists():
@@ -118,6 +131,14 @@ def recover_training_run(plan: dict, permit: dict, *, root: Path,
             else:
                 original_receipt_sha = digest(receipt)
                 outcome = "original_" + receipt["status"]
+                # Fail closed on tampering; never account an altered original.
+                if closed_receipts is not None and closed_receipts.get(trial["trial_id"]) != receipt:
+                    raise ValueError("recovery_receipt_altered")
+                if receipt["status"] == "completed":
+                    checkpoint = trial_dir / "checkpoint"
+                    if (receipt["checkpoint_relative_path"] != checkpoint.relative_to(root).as_posix() or
+                            not checkpoint.is_dir() or tree_sha256(checkpoint) != receipt["checkpoint_sha256"]):
+                        raise ValueError("recovery_checkpoint_hash_mismatch")
                 if existing is None:
                     raise ValueError("receipt_without_reservation")
                 if existing[1] is not None:
