@@ -209,6 +209,17 @@ renderer requires custody/gold-aware validation again. See [demo](docs/demo.md),
 [model card](docs/model-card.md), [limits](docs/LIMITATIONS.md) and
 [construction status](docs/CONSTRUCTION.md).
 
+## Host composition root
+
+Execution needs an operator-built host. `m7.host` is an inert composition root: it
+only wires existing adapters to host services the operator supplies, and it
+provides no trust services, verifiers or credentials of its own. Its default module
+always refuses. Without real host services, `--operator-host
+m7.host.unavailable:campaign_host` (or `scripts/train.py campaign --training-host
+m7.host.unavailable:training_host`) is designed to report `status: unavailable`,
+which is the honest blocked state of this build. Like everything else here, this
+path has not been run.
+
 ## Tests
 
 `tests/` holds pytest source for contracts, rendering, scoring/bootstrap, the

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Annotated, Literal
+import math
 import re
 
 from pydantic import Field
@@ -12,6 +13,7 @@ CATEGORIES = ('training', 'inference', 'retry', 'failed_trial')
 STATES = ('reserved', 'succeeded', 'failed', 'cancelled', 'unknown')
 COUNT_KEYS = ('attempts_N', 'known_provider_cash_micros', 'unresolved_liability_micros',
               'unknown_attempts', 'known_usage_units', 'unknown_usage_attempts')
+AMOUNT_SOURCES = ('estimated', 'actual')
 
 
 class EconomicAllocation(Boundary):
@@ -30,6 +32,17 @@ def _count(value: object) -> int:
     return value
 
 
+def _seconds(value: object) -> float:
+    if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
+        raise ValueError('invalid_compute_seconds')
+    return float(value)
+
+
+def _has_compute(categories: dict) -> bool:
+    return all(isinstance(categories.get(c), dict) and 'known_compute_seconds' in categories[c]
+               for c in CATEGORIES)
+
+
 def cost_report(summary: dict | None, allocation: EconomicAllocation | None = None) -> dict:
     empty = {'status': 'unknown', 'attempts_N': None, 'known_provider_cash_micros': None,
              'provider_cash_total_micros': None, 'unresolved_liability_micros': None,
@@ -39,6 +52,7 @@ def cost_report(summary: dict | None, allocation: EconomicAllocation | None = No
              'compute_seconds': None, 'economic_total_micros': None,
              'scope_complete': False,
              'currency': None,
+             'amount_sources': None, 'known_compute_seconds': None, 'unknown_compute_attempts': None,
              'economic_null_reason': 'unmeasured_or_unreconciled'}
     if summary is None:
         return empty
@@ -57,6 +71,24 @@ def cost_report(summary: dict | None, allocation: EconomicAllocation | None = No
     for key in ('attempts_N', 'known_provider_cash_micros', 'unresolved_liability_micros', 'unknown_attempts'):
         if sum(row[key] for row in output['by_category'].values()) != output[key]:
             raise ValueError('cost_category_reconciliation_mismatch')
+    sources = summary.get('amount_sources')
+    if sources is not None:
+        # Counts of attempts whose amount is a receipt ('actual') or the reservation ('estimated').
+        if not isinstance(sources, dict):
+            raise ValueError('invalid_amount_sources')
+        output['amount_sources'] = {source: _count(sources.get(source)) for source in AMOUNT_SOURCES}
+        if sum(output['amount_sources'].values()) != output['attempts_N']:
+            raise ValueError('amount_source_denominator_mismatch')
+    if _has_compute(categories):
+        # Compute time is a resource proxy only; no cost figure is ever derived from it.
+        for category in CATEGORIES:
+            row = output['by_category'][category]
+            row['known_compute_seconds'] = _seconds(categories[category].get('known_compute_seconds'))
+            row['unknown_compute_attempts'] = _count(categories[category].get('unknown_compute_attempts'))
+            if row['unknown_compute_attempts'] > row['attempts_N']:
+                raise ValueError('compute_attempt_count_mismatch')
+        output['known_compute_seconds'] = sum(r['known_compute_seconds'] for r in output['by_category'].values())
+        output['unknown_compute_attempts'] = sum(r['unknown_compute_attempts'] for r in output['by_category'].values())
     cash, liability = output['known_provider_cash_micros'], output['unresolved_liability_micros']
     if output['remaining_micros'] != max(0, output['cap_micros'] - cash - liability):
         raise ValueError('cost_remaining_mismatch')
@@ -115,6 +147,16 @@ def merge_cost_authorizations(summaries: tuple[dict, ...], *, currency: str) -> 
     combined['by_category'] = {category: {key: sum(row['by_category'][category][key] for row in reports)
                                         for key in COUNT_KEYS} for category in CATEGORIES}
     combined['states'] = {state: sum(row['states'][state] for row in reports) for state in STATES}
+    # Carry optional source/compute counts only when every authorization reports them.
+    if all(row['amount_sources'] is not None for row in reports):
+        combined['amount_sources'] = {source: sum(row['amount_sources'][source] for row in reports)
+                                      for source in AMOUNT_SOURCES}
+    if all(row['known_compute_seconds'] is not None for row in reports):
+        for category in CATEGORIES:
+            combined['by_category'][category]['known_compute_seconds'] = sum(
+                row['by_category'][category]['known_compute_seconds'] for row in reports)
+            combined['by_category'][category]['unknown_compute_attempts'] = sum(
+                row['by_category'][category]['unknown_compute_attempts'] for row in reports)
     combined['scope_complete'] = False
     combined['currency'] = currency
     combined['any_authorization_over_cap'] = any(row['over_cap'] for row in reports)

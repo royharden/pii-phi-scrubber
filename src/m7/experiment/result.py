@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable
 
 from .models import ARMS
-from .costing import CATEGORIES, STATES, COUNT_KEYS
+from .costing import AMOUNT_SOURCES, CATEGORIES, STATES, COUNT_KEYS
 
 _COUNTS = ('corpus_N', 'eligible_N', 'attempted_N', 'answered_N', 'error_N', 'unattempted_N',
            'pending_N', 'budget_rejected_N', 'adapter_unavailable_N', 'interrupted_unknown_N',
@@ -126,6 +126,14 @@ def _cost_projection(cost):
                               for c in CATEGORIES} if isinstance(cost.get('by_category'), dict) else None)
     output['states'] = ({s: _numeric(cost['states'].get(s)) for s in STATES}
                         if isinstance(cost.get('states'), dict) else None)
+    sources = cost.get('amount_sources')
+    output['amount_sources'] = ({s: _numeric(sources.get(s)) for s in AMOUNT_SOURCES}
+                                if isinstance(sources, dict) else None)
+    for key in ('known_compute_seconds', 'unknown_compute_attempts'):
+        output[key] = _numeric(cost.get(key))
+        if output['by_category'] is not None:
+            for category in CATEGORIES:
+                output['by_category'][category][key] = _numeric(cost['by_category'].get(category, {}).get(key))
     return output
 
 
@@ -143,7 +151,12 @@ def _adoption(value):
     for row in supplied:
         output['per_class'].append({'label': row['label'], 'passed': row.get('passed') if type(row.get('passed')) is bool else None,
             **{key: _numeric(row.get(key)) for key in ('recall', 'precision', 'recall_lower95',
-               'recall_floor', 'precision_floor', 'recall_lower95_floor')}})
+               'recall_floor', 'precision_floor', 'recall_lower95_floor', 'recall_numerator',
+               'recall_denominator', 'precision_numerator', 'precision_denominator')}})
+        for key in ('recall_null_reason', 'precision_null_reason'):
+            if row.get(key) not in (None, *_NULL_REASONS):
+                raise ValueError('unknown_metric_null_reason')
+            output['per_class'][-1][key] = row.get(key)
     for key in ('all_classes_meet_total_set_floors', 'positive_paired_macro_f1', 'no_increased_residual_leak',
                 'zero_structure_failures', 'full_intended_accounting', 'all_four_arms_attempted_full_population',
                 'closed_edition', 'cost_reconciled', 'attempt_lineage_complete'):

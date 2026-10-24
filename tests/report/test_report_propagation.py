@@ -7,6 +7,7 @@ Row shapes follow render_report: coverage columns are corpus, eligible, attempte
 answered, error, unattempted, publication_suppressed; quality columns are
 precision, recall, f1, tp, fp, fn, support.
 """
+import copy
 import json
 
 import pytest
@@ -229,3 +230,40 @@ def test_unsafe_suppression_card_writes_nothing(tmp_path):
     with pytest.raises(ValueError, match='suppression_card_not_safe_to_publish'):
         write_locked_artifacts(bundle(mixed_cells()), tmp_path / 'out', sources=sources)
     assert not (tmp_path / 'out').exists()
+
+def test_adoption_floor_table_shows_fractions_for_undefined_metrics():
+    document = html()
+    # finetuned NAME: precision 0/(0+0) -> N/A (0/0); recall 0/1 = 0.0; recall lower bound has no
+    # interval (2 blocks) -> not measured. Floors from scenario.policy(): 0.5, 0.5, 0.4.
+    assert ('<tr><th>NAME</th><td>N/A (0/0)</td><td>0.5</td><td>0.0</td><td>0.5</td>' + NM
+            + '<td>0.4</td></tr>') in document
+    # PHONE: no gold or predictions -> precision and recall both 0/0.
+    assert ('<tr><th>PHONE</th><td>N/A (0/0)</td><td>0.5</td><td>N/A (0/0)</td><td>0.5</td>' + NM
+            + '<td>0.4</td></tr>') in document
+
+
+def test_amount_sources_and_compute_time_reach_the_report_without_a_cost_figure():
+    summary = copy.deepcopy(PARTIAL_SUMMARY)
+    # 3 attempts: 2 with receipt amounts (actual), 1 still at its reservation (estimated).
+    summary['amount_sources'] = {'estimated': 1, 'actual': 2}
+    for category in summary['by_category'].values():
+        category.update(known_compute_seconds=0.0, unknown_compute_attempts=0)
+    # Inference: 4.5 seconds recorded on two attempts; the third has none.
+    summary['by_category']['inference'].update(known_compute_seconds=4.5, unknown_compute_attempts=1)
+    raw = aggregate_edition(edition(), records(), gold_channel(), mixed_cells(), closed=True,
+                            cost=cost_report(summary))
+    document = render_report(public_aggregate(raw))
+    assert ('Attempt amounts from authenticated receipts (actual): 2; reservation estimates still held '
+            'as liability (estimated): 1.') in document
+    assert 'Known compute seconds: 4.5; attempts without compute time: 1.' in document
+    assert 'no cost figure is derived from it' in document
+    # Compute time never turns into an economic or total cost.
+    assert '<tr><th>economic_total_micros</th>' + NM + '</tr>' in document
+    assert '<tr><th>provider_cash_total_micros</th>' + NM + '</tr>' in document
+
+
+def test_ledger_without_sources_or_compute_reports_them_unknown():
+    document = html()
+    assert ('Attempt amounts from authenticated receipts (actual): not measured; reservation estimates '
+            'still held as liability (estimated): not measured.') in document
+    assert 'Known compute seconds: not measured; attempts without compute time: not measured.' in document

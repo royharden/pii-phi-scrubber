@@ -50,5 +50,19 @@ punctuation handling; report wording for insufficient intervals, cost status and
 `N/A (0/0)` for zero denominators as distinct from `not measured`; and the
 reservation ledger's `amount_source`. This list is not exhaustive: other training,
 recovery, ledger, custody, detector and contract fixes from these rounds are
-recorded in the commit history. Their behavior is
+recorded in the commit history.
+
+Later source additions in the same rounds, equally unrun:
+- `m7.host`, an inert host composition root with an always-refusing default host
+  (`m7.host.unavailable`), plus host guards in `scripts/eval.py` and `scripts/train.py`;
+- the ledger's terminal-state guard (failed/cancelled attempts cannot be rewritten);
+- an injectable environment-check seam for training execution;
+- recovery closeout receipt and checkpoint hash cross-checks;
+- a successor freeze that refuses reuse of a predecessor's test entity values;
+- `contracts.failure()` keeping caller-measured duration and usage;
+- the cost report now carries the ledger's actual/estimated amount counts and
+  compute time (never converted to cost), and the adoption floor table carries
+  numerators/denominators so undefined metrics read `N/A (n/d)`.
+
+No real host service exists in this checkout. Their behavior is
 equally unverified until the suite runs.

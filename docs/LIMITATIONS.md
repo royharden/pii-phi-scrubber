@@ -20,9 +20,9 @@ Small hand-authored development examples cannot establish statistical power, gen
 privacy performance or separate causal gains from entity versus template novelty.
 Unmeasured arms, absent costs and insufficient cluster intervals are unknown, not zero.
 The report labels them `not measured`, `unknown` and `insufficient`; a metric with a
-zero denominator reads `N/A (0/0)`. The adoption floor table still shows an
-undefined fine-tuned precision, recall or lower recall bound as `not measured`,
-because the adoption rule stores no numerator or denominator. The harm-rate
+zero denominator reads `N/A (0/0)`. The adoption floor table shows an undefined
+fine-tuned precision or recall as `N/A (n/d)` and an undefined lower recall bound
+as `not measured`. The harm-rate
 Lower95/Upper95 columns and the paired class/micro difference table have no
 interval-state column, so an insufficient interval there also reads `not measured`.
 Fine-tuning can lose to the baseline; no model improvement is promised.

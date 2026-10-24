@@ -252,6 +252,12 @@ def _locked_details(bundle: Mapping) -> str:
                   'or total economic cost. Training and inference scopes must both be present.</p>')
     output.append(table(('Measure', 'Value'), [tr((key,), (cost.get(key),)) for key in cost_keys]))
     output.append('<p>Cost status: ' + _cost_state(cost) + '.</p>')
+    sources = cost.get('amount_sources') if isinstance(cost.get('amount_sources'), Mapping) else {}
+    output.append('<p>Attempt amounts from authenticated receipts (actual): ' + _number(sources.get('actual'))
+                  + '; reservation estimates still held as liability (estimated): ' + _number(sources.get('estimated'))
+                  + '.</p><p>Known compute seconds: ' + _number(cost.get('known_compute_seconds'))
+                  + '; attempts without compute time: ' + _number(cost.get('unknown_compute_attempts'))
+                  + '. Compute time is a resource measure; no cost figure is derived from it.</p>')
     # Same reconciliation condition as the adoption cost gate, not status alone.
     if not (_cost_state(cost) == 'known' and cost.get('unknown_attempts') == 0 and cost.get('scope_complete') is True
             and cost.get('over_cap') is False and isinstance(cost.get('currency'), str)):
@@ -329,7 +335,14 @@ def _locked_details(bundle: Mapping) -> str:
                               'zero_structure_failures', 'full_intended_accounting', 'all_four_arms_attempted_full_population',
                               'closed_edition', 'cost_reconciled', 'attempt_lineage_complete')]))
     floor_keys = ('precision', 'precision_floor', 'recall', 'recall_floor', 'recall_lower95', 'recall_lower95_floor')
-    output.append(table(('Class', *floor_keys), [tr((row['label'],), [row.get(k) for k in floor_keys])
+    def floor_cell(row, key):
+        # Observed precision/recall carry their fraction so 0/0 reads N/A, not "not measured".
+        if key in ('precision', 'recall'):
+            return _metric({'value': row.get(key), 'numerator': row.get(key + '_numerator'),
+                            'denominator': row.get(key + '_denominator'), 'null_reason': row.get(key + '_null_reason')})
+        return _number(row.get(key))
+    output.append(table(('Class', *floor_keys), ['<tr><th>' + escape(row['label']) + '</th>'
+                  + ''.join('<td>' + floor_cell(row, key) + '</td>' for key in floor_keys) + '</tr>'
                   for row in adoption.get('per_class', []) if row.get('label') in ('NAME', 'EMAIL', 'PHONE', 'ACCOUNT_ID')]))
     return ''.join(output)
 

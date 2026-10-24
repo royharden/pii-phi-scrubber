@@ -40,6 +40,15 @@ def _finite(value):
     return value if type(value) in (int, float) and math.isfinite(value) else None
 
 
+def _fraction(ratio) -> dict:
+    """Numerator/denominator/null reason of a scorer ratio, for N/A display only."""
+    ratio = ratio if isinstance(ratio, dict) else {}
+    counts = {key: ratio.get(key) if type(ratio.get(key)) is int and ratio.get(key) >= 0 else None
+              for key in ('numerator', 'denominator')}
+    reason = ratio.get('null_reason')
+    return {**counts, 'null_reason': reason if reason in ('zero_denominator', 'undefined_class') else None}
+
+
 def adoption_report(bundle: dict, policy: AdoptionPolicy) -> dict:
     arms = {row['arm']: row for row in bundle['arms']}
     fine, base = arms['finetuned'], arms['base']
@@ -53,6 +62,7 @@ def adoption_report(bundle: dict, policy: AdoptionPolicy) -> dict:
         precision = _finite(quality.get('precision', {}).get('value'))
         bounds = uncertainty.get('interval')
         lower = _finite(bounds[0]) if isinstance(bounds, list) and len(bounds) == 2 else None
+        recall_parts, precision_parts = _fraction(quality.get('recall')), _fraction(quality.get('precision'))
         values = (recall, precision, lower)
         passed = (all(v is not None for v in values) and recall >= floor.recall_minimum
                   and precision >= floor.precision_minimum and lower >= floor.recall_lower95_minimum)
@@ -60,6 +70,12 @@ def adoption_report(bundle: dict, policy: AdoptionPolicy) -> dict:
                           'recall_lower95': lower, 'recall_floor': floor.recall_minimum,
                           'precision_floor': floor.precision_minimum,
                           'recall_lower95_floor': floor.recall_lower95_minimum,
+                          'recall_numerator': recall_parts['numerator'],
+                          'recall_denominator': recall_parts['denominator'],
+                          'recall_null_reason': recall_parts['null_reason'],
+                          'precision_numerator': precision_parts['numerator'],
+                          'precision_denominator': precision_parts['denominator'],
+                          'precision_null_reason': precision_parts['null_reason'],
                           'passed': passed if all(v is not None for v in values) else None})
     paired = bundle.get('paired_fine_minus_base') or {}
     ci = paired.get('interval')
