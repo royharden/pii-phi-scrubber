@@ -1,25 +1,60 @@
-"""Source-only locked edition/custody orchestration. No import-time execution."""
-from .custody import channels_from_bundle
-from .authorization import EvaluationAuthorization, ReceiptAuthority
-from .executor import AdapterBinding, aggregate_edition, execute_edition
-from .journal import CellResult, EditionJournal, JournalError
-from .models import ARMS, ArmPin, CustodyGold, LockedEdition, PopulationMember
-from .result import public_aggregate, write_aggregate_result
-from .adoption import AdoptionPolicy, ClassFloor, adoption_report
-from .costing import EconomicAllocation, combined_cost_summary, cost_report
-from .timing import HardwareContext, LengthSlice, TimingPlan, TimingWorker, run_timing
-from .activation import OperatorHost, policy_from_selection_lock, timing_worker_factory
-from .isolated import IsolatedCampaignHost, IsolatedRegistry, WorkerDefinition
-from .released import read_released_channels
-from .campaign import execute_isolated_campaign, validate_campaign_inputs
+"""Lazy public exports; pure timing contracts never load worker/native consumers."""
+from importlib import import_module
 
-__all__ = ['ARMS', 'AdapterBinding', 'ArmPin', 'CellResult', 'CustodyGold', 'EditionJournal',
-           'EvaluationAuthorization', 'ReceiptAuthority',
-           'JournalError', 'LockedEdition', 'PopulationMember', 'aggregate_edition',
-           'channels_from_bundle', 'execute_edition', 'public_aggregate', 'write_aggregate_result',
-           'AdoptionPolicy', 'ClassFloor', 'adoption_report', 'EconomicAllocation',
-           'combined_cost_summary', 'cost_report', 'HardwareContext', 'LengthSlice',
-           'TimingPlan', 'TimingWorker', 'run_timing', 'OperatorHost',
-           'policy_from_selection_lock', 'timing_worker_factory', 'IsolatedCampaignHost',
-           'IsolatedRegistry', 'WorkerDefinition', 'read_released_channels',
-           'execute_isolated_campaign', 'validate_campaign_inputs']
+_EXPORTS = {'ARMS': 'models',
+ 'AdapterBinding': 'executor',
+ 'AdoptionPolicy': 'adoption',
+ 'ArmPin': 'models',
+ 'CellResult': 'journal',
+ 'ClassFloor': 'adoption',
+ 'CustodyGold': 'models',
+ 'EconomicAllocation': 'costing',
+ 'EditionJournal': 'journal',
+ 'EvaluationAuthorization': 'authorization',
+ 'HardwareContext': 'timing',
+ 'IsolatedCampaignHost': 'isolated',
+ 'IsolatedRegistry': 'isolated',
+ 'IsolatedTimingPlan': 'timing_contracts',
+ 'JournalError': 'journal',
+ 'LengthSlice': 'timing',
+ 'LockedEdition': 'models',
+ 'OperatorHost': 'activation',
+ 'PopulationMember': 'models',
+ 'PrimaryAccountingReceipt': 'timing_contracts',
+ 'ReceiptAuthority': 'authorization',
+ 'TimingContinuationAuthority': 'timing_contracts',
+ 'TimingLengthSlice': 'timing_contracts',
+ 'TimingPhasePermit': 'timing_contracts',
+ 'TimingPhaseRequest': 'timing_contracts',
+ 'TimingPlan': 'timing',
+ 'TimingWorker': 'timing',
+ 'WarmBackendIdentity': 'timing_contracts',
+ 'WarmTimingSession': 'timing_contracts',
+ 'WorkerDefinition': 'isolated',
+ 'adoption_report': 'adoption',
+ 'aggregate_edition': 'executor',
+ 'channels_from_bundle': 'custody',
+ 'combined_cost_summary': 'costing',
+ 'cost_report': 'costing',
+ 'execute_edition': 'executor',
+ 'execute_isolated_campaign': 'campaign',
+ 'policy_from_selection_lock': 'activation',
+ 'primary_accounting': 'isolated_timing',
+ 'public_aggregate': 'result',
+ 'read_released_channels': 'released',
+ 'retained_timing_identities': 'isolated_timing',
+ 'run_isolated_timing': 'isolated_timing',
+ 'run_timing': 'timing',
+ 'timing_worker_factory': 'activation',
+ 'validate_campaign_inputs': 'campaign',
+ 'validate_timing_plan': 'isolated_timing',
+ 'write_aggregate_result': 'result'}
+__all__ = list(_EXPORTS)
+
+def __getattr__(name):
+    module = _EXPORTS.get(name)
+    if module is None:
+        raise AttributeError(name)
+    value = getattr(import_module("." + module, __name__), name)
+    globals()[name] = value
+    return value

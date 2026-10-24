@@ -19,20 +19,7 @@ from .models import ARMS, LockedEdition, PopulationMember, canonical, commitment
 from .journal import EditionJournal
 
 
-class LengthSlice(Boundary):
-    minimum: Annotated[int, Field(ge=0, le=1024)]
-    maximum: Annotated[int, Field(ge=0, le=1024)]
-
-
-class HardwareContext(Boundary):
-    cpu: Identifier
-    gpu: Identifier | None
-    ram_gib: Annotated[float, Field(gt=0, allow_inf_nan=False)]
-    driver: Identifier
-    precision: Literal['fp32', 'fp16', 'bf16', 'int8', 'mixed']
-    batch_size: Literal[1] = 1
-    package_lock_sha256: Digest
-    environment_sha256: Digest
+from .timing_contracts import HardwareContext, TimingLengthSlice as LengthSlice
 
 
 class TimingPlan(Boundary):

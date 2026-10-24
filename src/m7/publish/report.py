@@ -226,20 +226,31 @@ def _locked_details(bundle: Mapping) -> str:
     timing = bundle.get('timing') or {}
     timing_rows = []
     timing_keys = ('cold_startup_ms', 'intended_samples_N', 'attempted_samples_N', 'answered_samples_N',
-                   'failed_samples_N', 'all_attempt_p50_ms', 'all_attempt_p95_ms', 'successful_only_p50_ms',
+                   'failed_samples_N', 'unattempted_samples_N', 'attempt_metadata_missing_N',
+                   'all_attempt_p50_ms', 'all_attempt_p95_ms', 'successful_only_p50_ms',
                    'successful_only_p95_ms', 'attempts_per_second', 'answered_per_second')
     for row in timing.get('arms', []):
         arm = row.get('arm')
         if arm not in ARMS:
             continue
-        timing_rows.append(tr((arm, 'network frontier' if arm == 'frontier' else 'offline local'), [row.get(k) for k in timing_keys]))
+        status = row.get('status')
+        status = status if status in ('measured', 'not_measured', 'measured_incomplete', 'unavailable_or_partial') else 'not_measured'
+        timing_rows.append(tr((arm, 'network frontier' if arm == 'frontier' else 'offline local', status), [row.get(k) for k in timing_keys]))
     output.append('<h2>Controlled concurrency-1 timing</h2><p>Three fixed-order warmed passes; detector, validation '
                   'and renderer included. Gold safety/scoring/bootstrap overhead is separate. Frontier includes '
-                  'network/provider latency; its cold figure is client initialization, not provider-server model load. '
-                  'Local cold figures cover model initialization; OS/process cache effects require qualification.</p>')
-    output.append(table(('Arm', 'Execution', *timing_keys), timing_rows))
+                  'network/provider latency. Isolated cold figures measure process/init handshake; model-load-only '
+                  'and provider-server startup remain unknown. Required parent transport/native guards remain in '
+                  'the supervised end-to-end call boundary. Missing outputs are not performance wins.</p>')
+    output.append(table(('Arm', 'Execution', 'Coverage', *timing_keys), timing_rows))
+    if timing.get('schema_version') == 'IsolatedTimingResult/v1':
+        output.append('<p>Campaign totals include primary and timing calls, retries and unresolved liabilities. '
+                      'Per-arm cost rows describe primary inference only. Primary quality is unchanged; no '
+                      'timing prediction enters quality/adoption scoring.</p>')
     timing_slices = []
     subset_keys = ('intended_samples_N', 'attempted_samples_N', 'answered_samples_N', 'failed_samples_N',
+                   'unattempted_samples_N', 'attempt_metadata_missing_N',
+                   'parent_control_overhead_ms',
+                   'protocol_elapsed_seconds', 'protocol_answered_per_second',
                    'all_attempt_p50_ms', 'all_attempt_p95_ms', 'answered_per_second')
     for row in timing.get('arms', []):
         if row.get('arm') not in ARMS:

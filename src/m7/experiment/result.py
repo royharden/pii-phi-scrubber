@@ -158,6 +158,8 @@ def _adoption(value):
 def _timing(value):
     if value is None:
         return None
+    if value.get('schema_version') == 'IsolatedTimingResult/v1':
+        return _isolated_timing(value)
     from .timing import HardwareContext
     hardware = HardwareContext.model_validate_json(json.dumps(value.get('hardware'), allow_nan=False))
     output = {'schema_version': 'TimingResult/v1', 'passes': 3, 'concurrency': 1,
@@ -198,6 +200,92 @@ def _timing(value):
     return output
 
 
+def _isolated_timing(value):
+    """Closed safe projection; no session/PID/input/attempt identifiers exported."""
+    output = {'schema_version': 'IsolatedTimingResult/v1', 'passes': 3, 'concurrency': 1,
+              'cache_replay': False, 'process_replacement': False, 'primary_quality_changed': False,
+              'gold_safety_scoring_included': False, 'safety_scoring_overhead_ms': None, 'arms': []}
+    from .timing_contracts import HardwareContext
+    output['hardware'] = HardwareContext.model_validate_json(
+        json.dumps(value.get('hardware'), allow_nan=False)).model_dump(mode='json')
+    for key in ('plan_sha256', 'edition_sha256', 'primary_accounting_sha256',
+                'hardware_receipt_sha256', 'journal_sha256'):
+        digest = value.get(key)
+        if type(digest) is not str or re.fullmatch('[0-9a-f]{64}', digest) is None:
+            raise ValueError('isolated_timing_commitment_required')
+        output[key] = digest
+    if (value.get('passes') != 3 or value.get('concurrency') != 1 or
+            any(value.get(key) is not False for key in
+                ('cache_replay', 'process_replacement', 'primary_quality_changed', 'gold_safety_scoring_included'))):
+        raise ValueError('isolated_timing_protocol_invalid')
+    counts = ('intended_samples_N', 'attempted_samples_N', 'answered_samples_N', 'failed_samples_N',
+              'logical_calls_N', 'physical_attempts_N', 'retry_attempts_N', 'attempt_metadata_missing_N',
+              'unattempted_samples_N')
+    durations = ('all_attempt_p50_ms', 'all_attempt_p95_ms', 'successful_only_p50_ms',
+                 'successful_only_p95_ms', 'elapsed_detector_seconds', 'attempts_per_second', 'answered_per_second')
+    def numbers(row):
+        out = {key: _numeric(row.get(key)) for key in counts + durations}
+        if any(type(out[k]) is not int or out[k] < 0 for k in counts):
+            raise ValueError('timing_integer_counts_required')
+        if (out['answered_samples_N'] + out['failed_samples_N'] != out['attempted_samples_N'] or
+                out['attempted_samples_N'] + out['unattempted_samples_N'] != out['intended_samples_N'] or
+                out['attempted_samples_N'] > out['logical_calls_N'] or
+                out['logical_calls_N'] > out['intended_samples_N'] or
+                out['retry_attempts_N'] > out['logical_calls_N'] or
+                out['physical_attempts_N'] > 2 * out['logical_calls_N'] or
+                out['attempt_metadata_missing_N'] > out['logical_calls_N'] or
+                any(out[k] is not None and out[k] < 0 for k in durations)):
+            raise ValueError('timing_denominator_mismatch')
+        if out['attempted_samples_N'] == 0 and any(out[k] is not None for k in durations):
+            raise ValueError('unmeasured_timing_must_be_null')
+        return out
+    if tuple(row.get('arm') for row in value.get('arms', [])) != ARMS:
+        raise ValueError('all_four_isolated_timing_arms_required')
+    for row in value['arms']:
+        if row.get('status') not in ('measured', 'unavailable_or_partial'):
+            raise ValueError('isolated_timing_status_invalid')
+        item = {'arm': row['arm'], 'status': row['status'],
+            'execution_kind': 'network_frontier' if row['arm'] == 'frontier' else 'offline_local',
+            'cold_kind': 'client_process_handshake' if row['arm'] == 'frontier' else 'process_backend_handshake',
+            'cold_startup_ms': _numeric(row.get('cold_startup_ms')),
+            'provider_server_startup_ms': None, 'model_load_only_ms': None,
+            **numbers(row.get('all_passes', row)), 'passes': [], 'length_slices': []}
+        if item['cold_startup_ms'] is not None and item['cold_startup_ms'] < 0:
+            raise ValueError('timing_cold_duration_invalid')
+        if len(row.get('passes', [])) != 3:
+            raise ValueError('three_isolated_timing_passes_required')
+        for ordinal, phase in enumerate(row['passes'], 1):
+            if (phase.get('pass') != ordinal or phase.get('status') not in ('measured', 'partial', 'unavailable')
+                    or phase.get('error_code') not in (None, 'adapter_unavailable', 'timing_failed', 'cancelled')):
+                raise ValueError('timing_phase_status_invalid')
+            item['passes'].append({'pass': ordinal, 'status': phase['status'],
+                                  'error_code': phase.get('error_code'),
+                                  'parent_control_overhead_ms': _numeric(phase.get('parent_control_overhead_ms')),
+                                  'protocol_elapsed_seconds': _numeric(phase.get('protocol_elapsed_seconds')),
+                                  'protocol_answered_per_second': _numeric(phase.get('protocol_answered_per_second')),
+                                  **numbers(phase)})
+            for key in ('parent_control_overhead_ms', 'protocol_elapsed_seconds', 'protocol_answered_per_second'):
+                if item['passes'][-1][key] is not None and item['passes'][-1][key] < 0:
+                    raise ValueError('timing_phase_overhead_invalid')
+            if phase['status'] == 'measured' and phase['answered_samples_N'] != phase['intended_samples_N']:
+                raise ValueError('timing_complete_claim_with_missing_outputs')
+        if (len({p['intended_samples_N'] for p in item['passes']}) != 1 or
+                any(sum(p[k] for p in item['passes']) != item[k] for k in counts) or
+                item['status'] == 'measured' and any(p['status'] != 'measured' for p in item['passes'])):
+            raise ValueError('timing_pass_accounting_mismatch')
+        cursor = 0
+        for part in row.get('length_slices', []):
+            lo, hi = part.get('minimum'), part.get('maximum')
+            if type(lo) is not int or type(hi) is not int or not 0 <= lo <= hi <= 1024 or lo != cursor:
+                raise ValueError('timing_slice_bounds_invalid')
+            cursor = hi + 1
+            item['length_slices'].append({'minimum': lo, 'maximum': hi, **numbers(part)})
+        if cursor != 1025 or any(sum(p[k] for p in item['length_slices']) != item[k] for k in counts):
+            raise ValueError('timing_slice_accounting_mismatch')
+        output['arms'].append(item)
+    return output
+
+
 def public_aggregate(bundle: dict) -> dict:
     """Closed field projection. Source-bearing keys/strings are not copied."""
     if bundle.get('schema_version') != 'EvaluationBundle/v2':
@@ -217,6 +305,9 @@ def public_aggregate(bundle: dict) -> dict:
     cost = bundle.get('cost')
     output['cost'] = _cost_projection(cost)
     output['timing'] = _timing(bundle.get('timing'))
+    if output['timing'] and output['timing']['schema_version'] == 'IsolatedTimingResult/v1':
+        if any(row['intended_samples_N'] != 3 * output['corpus_N'] for row in output['timing']['arms']):
+            raise ValueError('timing_fixed_primary_population_required')
     output['adoption'] = _adoption(bundle.get('adoption'))
     output['safety_scoring_overhead_ms'] = _numeric(bundle.get('safety_scoring_overhead_ms'))
     output['paired'] = {scope: _intervals(bundle.get('paired', {}).get(scope)) for scope in ('total', 'normal', 'challenge')}

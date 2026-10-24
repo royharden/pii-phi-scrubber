@@ -15,8 +15,8 @@ from m7.detectors.regex import detect_regex
 from m7.publish import artifact_is_safe, gate_record, write_report
 from m7.runner import run_offline
 from m7.experiment import (EditionJournal, EvaluationAuthorization, LockedEdition,
-    OperatorHost, ReceiptAuthority, TimingPlan, adoption_report, channels_from_bundle,
-    cost_report, execute_edition, policy_from_selection_lock, run_timing)
+    OperatorHost, ReceiptAuthority, channels_from_bundle,
+    execute_edition, policy_from_selection_lock)
 from m7.publish import write_locked_artifacts
 
 
@@ -31,6 +31,22 @@ def campaign_mode(args):
     edition = load_boundary(args.lock, LockedEdition)
     authorization = load_boundary(args.authorization, EvaluationAuthorization)
     validation = validate_campaign_inputs(bundle, edition, authorization)
+    from m7.experiment.timing_contracts import IsolatedTimingPlan
+    from m7.experiment.isolated_timing import validate_timing_plan
+    timing_plan = load_boundary(args.timing_plan, IsolatedTimingPlan) if args.timing_plan else None
+    from m7.training.timing_resources import TimingResourceSchedule, validate_timing_resources
+    timing_resources = load_boundary(args.timing_resources, TimingResourceSchedule) if args.timing_resources else None
+    if timing_plan is not None:
+        validate_timing_plan(edition, timing_plan)
+        validation['timing_plan_structure_valid_not_authorized'] = True
+        if timing_resources is not None:
+            validation['timing_resource_schedule'] = validate_timing_resources(bundle, timing_plan, timing_resources)
+    elif timing_resources is not None:
+        raise ValueError('timing_resource_schedule_requires_plan')
+    if args.run_timing and (timing_plan is None or timing_resources is None):
+        emit({'status': 'unavailable', 'reason': 'locked_timing_plan_and_resource_schedule_required',
+              'worker_started': False, 'product_acceptance': False})
+        return 3
     if not args.execute_campaign:
         if args.out is not None:
             raise ValueError('validation_cannot_write_artifacts')
@@ -44,11 +60,10 @@ def campaign_mode(args):
               'missing_fields': missing, 'product_acceptance': False})
         return 3
     if args.run_timing:
-        # WorkerSession's record replay cache is NOT a warmed timing pass. Never
-        # silently return it, change IDs, or include a new cold load as warmed time.
-        emit({'status': 'unavailable', 'reason': 'approved_isolated_worker_timing_phase_required',
-              'worker_started': False, 'product_acceptance': False})
-        return 3
+        if timing_plan is None or timing_resources is None or args.timing_out is None:
+            emit({'status': 'unavailable', 'reason': 'explicit_locked_timing_plan_and_directory_required',
+                  'worker_started': False, 'product_acceptance': False})
+            return 3
     if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_.]*:[A-Za-z_][A-Za-z0-9_]*', args.operator_host):
         raise ValueError('trusted_operator_module_required')
     module, factory = args.operator_host.split(':')
@@ -65,16 +80,23 @@ def campaign_mode(args):
             lifecycle_root=args.custody_lifecycle, journal_directory=args.journal,
             inference_directory=args.inference_export, gold_directory=args.gold_export,
             inference_export_sha256=args.inference_export_sha256, gold_export_sha256=args.gold_export_sha256,
-            artifact_directory=args.out)
+            artifact_directory=args.out, timing_plan=timing_plan if args.run_timing else None,
+            timing_directory=args.timing_out if args.run_timing else None,
+            timing_resources=timing_resources if args.run_timing else None)
     except CampaignPrerequisiteError as error:
         emit({'status': 'unavailable', 'reason': error.code, 'product_acceptance': False})
         return 3
     emit(result)
-    return 0 if result['edition_state'] == 'closed' and result['comparison_status'] == 'fully_attempted' else 3
+    return 0 if (result['edition_state'] == 'closed' and result['comparison_status'] == 'fully_attempted'
+                 and result['timing_status'] in ('not_requested', 'measured')) else 3
 
 
 def execute_locked(args):
     """Future trusted operator activation. No automatic host/provider selection."""
+    if args.run_timing:
+        emit({'status': 'unavailable', 'reason': 'isolated_campaign_timing_required',
+              'worker_started': False, 'product_acceptance': False})
+        return 3
     required = ('lock', 'authorization', 'selection_lock', 'targets', 'custody_bundle',
                 'custody_lifecycle', 'journal', 'operator_host', 'out')
     if any(getattr(args, key) is None for key in required):
@@ -116,18 +138,6 @@ def execute_locked(args):
         authorize=authorize, cancelled=host.cancelled, cost_summary=host.cost_summary,
         economic_allocation=host.economic_allocation, verify_receipt=host.verify_receipt,
         authorize_preflight=preflight_authority)
-    if args.run_timing:
-        if args.timing_plan is None or args.timing_out is None or host.timing_factories is None:
-            raise ValueError('explicit_timing_inputs_required')
-        plan = load_boundary(args.timing_plan, TimingPlan)
-        public_warmup = development_records()[0].record
-        timing_destination = host.custody_filesystem.require_path('evaluator', args.timing_out, must_exist=False)
-        bundle['timing'] = run_timing(edition, inference, plan, public_warmup,
-            host.timing_factories(), timing_destination, evaluation_journal=journal,
-            authorize=authorize, verify_timing_authority=lambda digest:
-                host.verify_receipt('timing_execution', digest), cancelled=host.cancelled)
-        bundle['cost'] = cost_report(host.cost_summary(), host.economic_allocation)
-        bundle['adoption'] = adoption_report(bundle, edition.adoption_policy)
     by_id = {row.record_id: row.spans for row in gold}
     disposition = write_locked_artifacts(bundle, args.out,
         sources=tuple((record, by_id[record.record_id]) for record in inference))
@@ -158,6 +168,7 @@ def main():
     parser.add_argument('--operator-host', help='trusted reviewed module:factory; no host is auto-selected')
     parser.add_argument('--run-timing', action='store_true')
     parser.add_argument('--timing-plan', type=Path)
+    parser.add_argument('--timing-resources', type=Path, help='preregistered D5 TimingResourceSchedule; no approval implied')
     parser.add_argument('--timing-out', type=Path)
     parser.add_argument('--view-result', type=Path)
     parser.add_argument('--result-sha256')
@@ -170,6 +181,8 @@ def main():
         parser.error('choose_exactly_one_mode')
     if args.execute_campaign and not args.launch_bundle:
         parser.error('campaign_execution_requires_launch_bundle')
+    if (args.run_timing or args.timing_plan or args.timing_resources or args.timing_out) and not args.launch_bundle:
+        parser.error('isolated_campaign_timing_required')
     if args.launch_bundle:
         return campaign_mode(args)
     if args.validate_only:

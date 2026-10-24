@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from m7.data.filesystem import CustodyFilesystem
     from m7.ledger import ReservationLedger
     from m7.providers.worker import WorkerSessionProtocol
+    from m7.providers.worker_timing import WarmBackendAttestor
     from m7.providers.worker_transport import IsolatedLauncher, WorkerProcessVerifier
     from .costing import EconomicAllocation
 
@@ -49,6 +50,10 @@ class IsolatedCampaignHost:
     reconcile_verifier: Callable[[ReconcileRequest], CashReceipt | None] | None = None
     diagnostic_sink: Callable[[dict], None] | None = None
     economic_allocation: EconomicAllocation | None = None
+    # Explicit trusted adapter over D4 continuation/D5 current resource authority.
+    # Absent means primary-only; never default to permissive authorization.
+    timing_authority_factory: Callable[..., object] | None = None
+    warm_attestor: WarmBackendAttestor | None = None
 
 
 def validate_definitions(edition: LockedEdition, profile: WorkerProfile,
@@ -98,6 +103,7 @@ class _WorkerAdapter:
         self._last_identity: tuple[str, str] | None = None
         self._guard_events: tuple[AttemptEvent, ...] | None = None
         self.cleanup_status = 'not_started'
+        self.launch_handshake_ms: float | None = None
 
     def _guard(self):
         self.edition.require_current()
@@ -125,12 +131,14 @@ class _WorkerAdapter:
             # No held-out directories, gold, provenance or ledger paths reach the
             # child bootstrap. Ledgers stay in this parent-side broker mapping.
             self.host.custody_filesystem.require_path('inference', self.definition.launch.working_directory)
+            started = perf_counter()
             self.session = launch_worker(self.definition.bootstrap, self.definition.launch,
                 profile=self.profile, isolation_guard=self.host.isolation_guard,
                 launcher=self.host.launcher, process_verifier=self.host.process_verifier,
                 ledgers=self.host.ledgers, allow_execution=True,
                 reconcile_verifier=self.host.reconcile_verifier,
-                diagnostic_sink=self.host.diagnostic_sink)
+                diagnostic_sink=self.host.diagnostic_sink, warm_attestor=self.host.warm_attestor)
+            self.launch_handshake_ms = (perf_counter() - started) * 1000
             self.cleanup_status = 'open'
         self.session.preflight(records)
         self._guard()
@@ -181,6 +189,18 @@ class _WorkerAdapter:
             raise ValueError('worker_retry_lineage_unknown')
         return tuple(output)
 
+    def timing_predict(self, record: LogRecord) -> Prediction:
+        """Coordinator revalidates parent campaign outside the timed boundary.
+
+        The D6 session still performs mandatory exact-process/phase guards and
+        parent-broker reservation checks. No launch or preflight fallback here.
+        """
+        self._last_identity = (record.record_id, record.content_sha256)
+        self._guard_events = None
+        if self.session is None:
+            raise AdapterFault('unavailable')
+        return self.session.predict(record)
+
     def cancel(self):
         if self.session is not None:
             self.session.cancel()  # ONLY this launch's owned process/job.
@@ -203,6 +223,8 @@ class IsolatedRegistry:
                  definitions: Mapping[str, WorkerDefinition], launch_digests: Mapping[str, str],
                  *, host: IsolatedCampaignHost, revalidate: Callable[[], None]):
         validate_definitions(edition, profile, definitions, launch_digests)
+        self.profile_sha256 = worker_profile_digest(profile)
+        self.launch_digests = dict(launch_digests)
         self.adapters = {pin.arm: _WorkerAdapter(edition, definitions[pin.arm], profile, pin, host, revalidate)
                          for pin in edition.arm_pins}
         self.bindings = {arm: AdapterBinding(pin=adapter.pin, predict=adapter.predict,
@@ -212,6 +234,11 @@ class IsolatedRegistry:
     def cancel(self) -> None:
         for adapter in self.adapters.values():
             adapter.cancel()
+
+    def timing_binding(self, arm: str) -> AdapterBinding:
+        adapter = self.adapters[arm]
+        return AdapterBinding(pin=adapter.pin, predict=adapter.timing_predict,
+                              preflight=adapter.preflight, attempt_metadata=adapter.metadata)
 
     def close(self) -> dict[str, str]:
         for adapter in self.adapters.values():

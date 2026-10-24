@@ -222,6 +222,12 @@ class EditionJournal:
     def closed(self) -> bool:
         return bool(self._events and self._events[-1]['event']['kind'] == 'closed')
 
+    @property
+    def head_sha256(self) -> str:
+        if self._edition is None:
+            raise JournalError('edition_not_sealed')
+        return self._events[-1]['sha256'] if self._events else self._edition.sha256
+
     def terminals(self) -> dict[tuple[str, str], CellResult]:
         return {(cell.arm, cell.record_id): cell for row in self._events
                 if row['event']['kind'] == 'terminal'

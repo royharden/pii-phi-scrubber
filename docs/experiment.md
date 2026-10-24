@@ -187,3 +187,76 @@ the warm backend and supplies fresh logical controllers, isolated `--run-timing`
 is explicitly unavailable. No cold-respawn timing or changed IDs are substituted.
 This remaining source seam is not a measured timing failure or complete scientific
 product acceptance.
+
+
+## Retained-worker timing continuation (D7-D source)
+
+`m7.experiment.timing_contracts` is a pure import seam, with lazy experiment
+package exports to avoid importing native consumers from the worker wire.
+`IsolatedTimingPlan/v1` includes ordered PopulationMember records, exact ArmPins,
+length partition 0..1024, hardware/library/environment pins, passes=3 and
+concurrency=1. It excludes full edition/profile/launch hashes; those later bind
+in TimingPhaseRequest. The primary and timing orders must match exactly.
+
+`PrimaryAccountingReceipt/v1` commits closed journal head, all terminal cells,
+quality projection and population. Zero unresolved begin entries are mandatory;
+negative terminal outcomes stay recorded. It grants no custody or spending rights.
+
+A retained D6 session implements `timing_identity`, `begin_timing_phase`,
+`predict`, `finish_timing_phase`. WarmBackendIdentity binds PID/start, original
+session/backend instance, P/L/bootstrap, pin and original population/order. A
+current parent-attested receipt authenticates this identity. No cache result or
+replacement session is accepted. Each phase's namespace commits primary, plan,
+identity and ordinal; attempt IDs cannot overlap primary or earlier phases.
+
+The trusted host's timing_authority_factory receives the actual D4 lifecycle,
+D5 bundle, edition, primary receipt, plan, resource schedule and available parent-attested warm identities. Its strict adapter implements
+`prepare(primary,plan)` without consuming held-out open; `authorize(request)`
+persists a single consumed phase and returns TimingPhasePermit; `current` checks
+release/revocation/native/resource/expiry before each message; `finish` records
+completed or aborted. Permits authenticate exact request and separate custody and
+resource receipts. Structural validity is never authentication. The D5 canonical TimingResourceSchedule is structurally validated against the
+campaign before activation and authenticated under timing_resource_schedule.
+D5 resource verification must cover primary + three
+passes, worst-case retries and prior known/unknown training liabilities.
+
+`run_isolated_timing` creates a new private exclusive timing directory and durable
+hash-chained begin/terminal events. A crash leaves an uncertain begin and prevents
+automatic restart. Arms with no current warm session still have three unavailable
+passes with the full intended population; no call occurs. Every attempted sample
+measures detector + output validation + rendering. Gold scoring/whole-artifact
+safety checks occur separately. Partial samples and all failures remain visible;
+zero attempts produce null latency/throughput. Successful-only timing is labeled.
+Cold startup is the actual primary process/init handshake. Model-load-only and
+provider-server startup are not inferred. OS/cache/guard overhead is not removed
+or called pure model time. Primary quality remains committed; current campaign
+costs and unresolved liabilities are refreshed after timing. Sessions close in
+finally across primary and timing; unverified cleanup blocks automatic reuse.
+
+No native query, worker, model, timing experiment or approval has executed here.
+Producer adapters must reconcile the declared contracts with their canonical
+source before actual activation; unavailable authentication/phase APIs fail closed.
+
+Timing survivor rule R1: resource/custody authorizations pin only actual surviving
+original warm identities and explicitly mark unavailable arms. The immutable plan
+retains all four launch pins, worst-case caps and all 12 arm/pass denominators.
+Missing identity is never replaced, fabricated or treated as zero cost/latency.
+
+The timing host factory returns canonical D4 CustodyTimingAuthority over the supplied
+original lifecycle/edition, with canonical D5 TimingResourceAuthority over the
+supplied bundle/schedule. Both authorities must bind exactly the verified actual
+survivor identity set. D7 supplies authority.verify_receipt as a parent-only
+keyword to D6 begin_timing_phase; this authenticates live consumed custody permits.
+It is never sent to the worker or installed as the independent lifecycle verifier.
+Whole-phase elapsed time/throughput includes authorization and durable bookkeeping;
+call-boundary latency and parent-control overhead remain separately labeled.
+
+As-built D6-E integration: the host also supplies warm_attestor(claim,physical_calls)
+for actual independent original backend/process attestation. D7 forwards it on the
+ORIGINAL launch. Bootstrap timing_plan_sha256 and timing_order_sha256 must already
+be pinned before profile/launch approval; null means unsupported. The actual
+begin_timing_phase(...,verify_receipt=...) source API is consumed directly; the
+optional bind_timing_authority bridge is not required by this consumer.
+The returned D4 authority uses WindowsTimingProcessGuard over the same original
+lifecycle, host process verifier and exact campaign launch policies. No native
+probe occurs during construction; every future message requires current proof.

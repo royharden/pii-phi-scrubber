@@ -96,11 +96,40 @@ alone first-opens after corpus preflight. Owned workers close on all exit paths;
 unverified cleanup writes a private investigation marker and blocks automatic reuse.
 Closed-edition replay starts no worker. See [the consumer contract](docs/experiment.md).
 
-This isolated path currently covers primary evaluation. Its `--run-timing` request
-fails explicitly until an approved worker phase/reset contract retains a warm backend
-with fresh per-pass controllers. Cached replies are not timing, and a new cold process
-is not a warmed pass. The lower-level timing SOURCE below remains available to a
-separately qualified host; no timing outcome is fabricated or silently substituted.
+The isolated campaign also has an explicit retained-worker timing continuation.
+Supply `--run-timing --timing-plan path/to/isolated-timing-plan.json
+--timing-resources path/to/timing-resource-schedule.json
+--timing-out C:/evaluator-private/new-timing-directory` on the **initial**
+`--execute-campaign` invocation above. This is source construction only; no timing
+has run. Without `--execute-campaign`, the plan is structurally validated without
+loading a host, reading held-out channels, querying native controls or launching.
+
+The preregistered `IsolatedTimingPlan/v1` pins original record order/hashes, all
+four model/config/checkpoint pins, hardware/environment/library commitments,
+length partitions, concurrency 1 and exactly three passes. Its hash excludes the
+full edition/profile/launch digests to avoid a hashing cycle. A later authenticated
+post-primary receipt binds those actual identities, immutable closed primary
+accounting, current custody/native authority and worst-case resources/expiry.
+The trusted host supplies `timing_authority_factory(custody=..., bundle=...,
+edition=..., primary=..., plan=..., resources=..., identities=...)`, implementing the narrow D4 continuation/D5
+resource contract in [the timing protocol](docs/experiment.md). No receipt file
+can authorize itself. Missing real worker phase support remains unavailable.
+
+Timing retains the original loaded backend and process. Each pass resets only
+logical caches/controllers and has a distinct parent-brokered attempt namespace.
+It sends the same original bounded record IDs/content, retains gold in the evaluator,
+and never opens held-out custody again. Closed-primary replay cannot request warm
+timing because its original workers have exited. Dead/failed arms remain in all
+three fixed denominators; the coordinator never respawns them as warm. Interrupted
+phases/unknown cleanup require investigation, not a fresh directory or retry.
+
+Primary quality stays frozen. Campaign cash totals include timing/retries and
+unresolved liabilities; per-arm primary-quality cost rows remain primary-only.
+Cold figures measure process/init handshake, not pure model-load time; provider
+server startup remains unknown. Warm latency includes the supervised detector,
+validation and renderer call boundary, including required transport/guard costs.
+Evaluator gold safety/scoring/bootstrap overhead is separate. All samples remain
+private; numeric/enum aggregates pass the existing whole-artifact gold scan.
 
 The [executor contract](docs/experiment.md) fixes identical record/hash populations
 and all four arm pins. It gives adapters only standalone inference records. The
@@ -136,15 +165,9 @@ preflight failures and budget rejections are visible; an unrun arm has null metr
 A new adapter or test-informed change requires a new authorized edition, not erasing
 this one's outcomes. The output directory must be new. No command starts a listener.
 
-Add `--run-timing --timing-plan path/to/timing-plan.json --timing-out C:/evaluator-private/timing`
-only when a separate current `timing_execution` receipt authenticates that plan and
-its costs. The primary edition must first be closed. Timing uses concurrency 1,
-three fixed-order warmed passes, fixed length slices and separately measured cold
-initialization. Fresh per-pass D6 controllers share the warmed backend, so replay
-caches cannot masquerade as timing. Network frontier and offline local timings are
-labeled separately. Interrupted timing cannot silently restart; its marker/partial
-samples remain for investigation. Hardware/library locks and gold safety/scoring
-overhead are displayed separately from detector+validator+renderer latency.
+The lower-level `--execute-locked` path remains a qualified-host integration seam.
+Use the isolated campaign continuation above for authoritative worker timing.
+Legacy `TimingPlan/v1` in-process timing is not isolated-worker evidence.
 
 ## Results, costs and safe offline replay
 
@@ -196,3 +219,27 @@ container/environment/deployment scaffolding, remote or publication is supplied.
 
 Newly authored source is MIT. Model/data/dependency rights are separate; see
 [VENDORED.md](VENDORED.md). The shell's historical name expands none of this scope.
+
+Timing survivor rule R1: resource/custody authorizations pin only actual surviving
+original warm identities and explicitly mark unavailable arms. The immutable plan
+retains all four launch pins, worst-case caps and all 12 arm/pass denominators.
+Missing identity is never replaced, fabricated or treated as zero cost/latency.
+
+The timing host factory returns canonical D4 CustodyTimingAuthority over the supplied
+original lifecycle/edition, with canonical D5 TimingResourceAuthority over the
+supplied bundle/schedule. Both authorities must bind exactly the verified actual
+survivor identity set. D7 supplies authority.verify_receipt as a parent-only
+keyword to D6 begin_timing_phase; this authenticates live consumed custody permits.
+It is never sent to the worker or installed as the independent lifecycle verifier.
+Whole-phase elapsed time/throughput includes authorization and durable bookkeeping;
+call-boundary latency and parent-control overhead remain separately labeled.
+
+As-built D6-E integration: the host also supplies warm_attestor(claim,physical_calls)
+for actual independent original backend/process attestation. D7 forwards it on the
+ORIGINAL launch. Bootstrap timing_plan_sha256 and timing_order_sha256 must already
+be pinned before profile/launch approval; null means unsupported. The actual
+begin_timing_phase(...,verify_receipt=...) source API is consumed directly; the
+optional bind_timing_authority bridge is not required by this consumer.
+The returned D4 authority uses WindowsTimingProcessGuard over the same original
+lifecycle, host process verifier and exact campaign launch policies. No native
+probe occurs during construction; every future message requires current proof.
