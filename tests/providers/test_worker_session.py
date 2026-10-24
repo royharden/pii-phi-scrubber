@@ -125,6 +125,8 @@ def test_child_loss_after_reserve_preserves_unknown_liability(tmp_path):
     worker, child, ledger = session(tmp_path, reserve(), AdapterFault('backend_failure'))
     result = worker.predict(RECORD)
     assert result.status == 'failed' and result.error_code == 'backend_failure'
+    # A terminal failure carries the parent's measured wall time, a real non-negative float.
+    assert type(result.duration_ms) is float and result.duration_ms >= 0
     # The outstanding reservation is settled as unknown (full liability kept), never released.
     assert ledger.reconciled == [('a-1', None, 'unknown', None)]
     (event,) = worker.last_attempts

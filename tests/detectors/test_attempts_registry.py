@@ -135,6 +135,9 @@ def test_second_transient_failure_fails_without_a_third_attempt():
     p = adapter(make_record(EMAIL_MESSAGE, "r1"))
     assert p.status == "failed" and p.error_code == "backend_failure"
     assert transport.calls == 2 and len(ledger.reserved) == 2 and len(adapter.last_attempts) == 2
+    # The failure keeps the measured logical duration (both attempts), and the last reservation's ID.
+    assert type(p.duration_ms) is float and p.duration_ms >= 0
+    assert p.usage_ref == ledger.reserved[1][0]
 
 
 def test_non_transient_transport_failure_is_not_retried():
@@ -173,6 +176,7 @@ def test_registry_without_execution_authority_fails_closed_without_calling_trans
     registry, _ = frontier_adapter(transport, allow_execution=False)
     p = registry["frontier"](make_record(EMAIL_MESSAGE, "r1"))
     assert p.status == "unavailable" and p.error_code == "permit_required" and transport.calls == 0
+    assert p.duration_ms is None and p.usage_ref is None  # no attempt ran: nothing is fabricated
     with pytest.raises(AdapterFault) as caught:
         registry["frontier"].preflight((make_record(EMAIL_MESSAGE, "r1"),))
     assert caught.value.code == "permit_required"

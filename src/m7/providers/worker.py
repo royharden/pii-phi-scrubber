@@ -400,14 +400,16 @@ class WorkerSession(WarmSessionMixin):
                 self._abort()
                 self._record_uncertain(record, started)
                 result = failure(record, run_id=self.run_id, arm=self.arm, model_id=self.model_id,
-                    attempt_id="worker-" + uuid4().hex, status="cancelled", error_code="cancelled")
+                    attempt_id="worker-" + uuid4().hex, status="cancelled", error_code="cancelled",
+                    duration_ms=max(0.0, (monotonic() - started) * 1000))
             except BaseException:
                 self._abort()
                 self._record_uncertain(record, started)
                 result = failure(record, run_id=self.run_id, arm=self.arm, model_id=self.model_id,
                     attempt_id="worker-" + uuid4().hex,
                     status="cancelled" if self._cancelled.is_set() else "failed",
-                    error_code="cancelled" if self._cancelled.is_set() else "backend_failure")
+                    error_code="cancelled" if self._cancelled.is_set() else "backend_failure",
+                    duration_ms=max(0.0, (monotonic() - started) * 1000))  # parent wall time of this predict
             self._cache[record.record_id] = result
             self._cached_events[record.record_id] = self.last_attempts
             self._timing_terminal(record)
