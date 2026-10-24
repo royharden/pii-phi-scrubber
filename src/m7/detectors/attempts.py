@@ -65,7 +65,8 @@ class AttemptController:
     def __init__(self, *, run_id: str, arm: str, model_id: str, policy: AttemptPolicy,
                  ledger: Ledger, cancelled: Callable[[], bool] = lambda: False,
                  receipt_resolver: ReceiptResolver | None = None,
-                 diagnostic_sink: Callable[[dict], None] | None = None):
+                 diagnostic_sink: Callable[[dict], None] | None = None,
+                 attempt_namespace: str | None = None):
         if (ledger.authorization_id != policy.authorization_id or ledger.cap != policy.authorization_cap_micros
                 or policy.worst_case_micros > policy.authorization_cap_micros):
             raise ValueError("ledger_authorization_mismatch")
@@ -73,6 +74,10 @@ class AttemptController:
         self.policy, self.ledger = policy, ledger
         self.cancelled, self.receipt_resolver = cancelled, receipt_resolver
         self.diagnostic_sink = diagnostic_sink
+        if attempt_namespace is not None and (len(attempt_namespace) != 64 or
+                any(c not in "0123456789abcdef" for c in attempt_namespace)):
+            raise ValueError("invalid_attempt_namespace")
+        self.attempt_namespace = attempt_namespace
         self.last_attempts: tuple[AttemptDiagnostic, ...] = ()
         self._records: dict[str, tuple[str, Prediction | None]] = {}
         self._completed_attempts: dict[str, tuple[AttemptDiagnostic, ...]] = {}
@@ -175,7 +180,7 @@ class AttemptController:
             self._emit(record, diagnostics[-1])
 
         for ordinal in range(1, 2 + self.policy.max_transient_retries):
-            attempt_id = "a-" + uuid4().hex
+            attempt_id = (("t-" + self.attempt_namespace + "-") if self.attempt_namespace else "a-") + uuid4().hex
             started = perf_counter()
             try:
                 prepare()  # Permission/revocation/expiry/token limits before reserve.

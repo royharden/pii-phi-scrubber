@@ -187,6 +187,18 @@ class PermittedFrontier:
                  transport: Transport, counter: TokenCounter, allow_execution: bool = False):
         self.config, self.permit, self.run_id = config, permit, run_id
         self.transport, self.counter, self.allow_execution = transport, counter, allow_execution
+        from uuid import uuid4
+        self._warm_id = "client-" + uuid4().hex
+        self._warm_transport, self._warm_counter = transport, counter
+        self._physical_calls = 0
+
+    def warm_state(self):
+        """Client continuity only. Provider server warmth remains unknown."""
+        self.check()
+        if (not self._physical_calls or self.transport is not self._warm_transport
+                or self.counter is not self._warm_counter):
+            raise AdapterFault("unavailable")
+        return self._warm_id, self._physical_calls
 
     def check(self) -> None:
         if not self.allow_execution or self.config.prompt_sha256 != PROMPT_SHA256:
@@ -217,6 +229,7 @@ class PermittedFrontier:
     def __call__(self, record: LogRecord) -> Completion:
         payload = self.preflight(record)
         self.check()
+        self._physical_calls += 1
         response = self.transport(self.config, payload)
         return parse_completion(response, self.config, self.counter)
 

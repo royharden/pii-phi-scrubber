@@ -9,7 +9,8 @@ from collections.abc import Callable, Mapping
 from contextlib import redirect_stderr, redirect_stdout
 import hashlib
 import json
-from time import monotonic
+from time import monotonic, perf_counter
+from uuid import uuid4
 from typing import BinaryIO
 
 from m7.contracts import LogRecord, Prediction
@@ -18,8 +19,9 @@ from m7.ledger import BudgetExceeded
 from .worker_wire import (
     AttemptEvent, BrokerReply, Command, ControlCommand, InitCommand, MAX_BOOTSTRAP_BYTES,
     MAX_RECORD_BYTES, MAX_REPLY_BYTES, ReconcileRequest, RecordCommand, ReserveRequest,
-    SealCommand, WorkerBootstrap, WorkerReply, decode_line, encode_line,
+    SealCommand, TimingCommand, WorkerBootstrap, WorkerReply, decode_line, encode_line,
 )
+from .worker_phase import WorkerPhases
 
 
 def population_digest(population: Mapping[str, str]) -> str:
@@ -137,6 +139,7 @@ def _serve(source: BinaryIO, output: BinaryIO, factory: RegistryFactory) -> int:
                                  limit=MAX_REPLY_BYTES))
         output.flush()
         population = {}
+        phases = WorkerPhases(bootstrap, adapter)
         sealed = None
         while monotonic() - started < bootstrap.limits.lifetime_seconds:
             raw = source.readline(MAX_RECORD_BYTES + 1)
@@ -157,7 +160,19 @@ def _serve(source: BinaryIO, output: BinaryIO, factory: RegistryFactory) -> int:
                 output.write(encode_line(reply, limit=MAX_REPLY_BYTES))
                 output.flush()
                 return 0
-            if isinstance(command, SealCommand):
+            if isinstance(command, TimingCommand):
+                if sealed is None:
+                    raise ValueError("worker_preflight_required")
+                if command.kind == "timing_identity":
+                    reply = WorkerReply(session_id=bootstrap.session_id, seq=seq,
+                        status="timing_identity", backend_state=phases.state(population))
+                elif command.kind == "timing_begin":
+                    phases.begin(command.request, command.permit, population)
+                    reply = WorkerReply(session_id=bootstrap.session_id, seq=seq, status="timing_begun")
+                else:
+                    phases.finish(command.request, population)
+                    reply = WorkerReply(session_id=bootstrap.session_id, seq=seq, status="timing_finished")
+            elif isinstance(command, SealCommand):
                 digest = population_digest(population)
                 if command.count != len(population) or command.population_sha256 != digest:
                     raise ValueError("worker_population_mismatch")
@@ -180,6 +195,8 @@ def _serve(source: BinaryIO, output: BinaryIO, factory: RegistryFactory) -> int:
                 else:
                     if sealed is None or population.get(record.record_id) != record.content_sha256:
                         raise ValueError("worker_preflight_required")
+                    phases.before_record(record, population)
+                    call_started = perf_counter()
                     try:
                         prediction = adapter(record)
                     except BudgetExceeded:
@@ -188,8 +205,21 @@ def _serve(source: BinaryIO, output: BinaryIO, factory: RegistryFactory) -> int:
                     else:
                         if not isinstance(prediction, Prediction):
                             raise ValueError("prediction_wire_required")
+                        if active == "regex" and phases.request is not None:
+                            attempt_id = 't-' + phases.request.attempt_namespace + '-' + uuid4().hex
+                            prediction = prediction.model_copy(update={'attempt_id': attempt_id})
+                            sink({'run_id': bootstrap.run_id, 'arm': active, 'model_id': adapter.model_id,
+                                'record_id': record.record_id, 'content_sha256': record.content_sha256,
+                                'attempt': {'attempt_id': attempt_id, 'ordinal': 1, 'status': prediction.status,
+                                    'error_code': prediction.error_code,
+                                    'duration_ms': max(0.0, (perf_counter() - call_started) * 1000),
+                                    'input_tokens': None, 'output_tokens': None,
+                                    'reservation_micros': None, 'actual_micros': None,
+                                    'liability_status': 'unknown', 'retry_reason': None,
+                                    'physical_may_have_started': True}})
                         reply = WorkerReply(session_id=bootstrap.session_id, seq=seq, status="prediction",
                                             prediction=prediction, events=tuple(events))
+                    phases.terminal(record)
                     del record
             else:
                 raise ValueError("invalid_worker_command")

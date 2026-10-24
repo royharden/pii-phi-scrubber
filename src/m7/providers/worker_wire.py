@@ -8,6 +8,7 @@ from pydantic import Field, TypeAdapter, model_validator
 
 from m7.contracts import Arm, Boundary, Digest, Identifier, LogRecord, Prediction
 from .contracts import AttemptPolicy, ExecutionPermit, FrontierConfig, LocalModelConfig
+from m7.experiment.timing_contracts import TimingPhaseRequest, TimingPhasePermit
 
 MAX_BOOTSTRAP_BYTES = 2_000_000
 MAX_RECORD_BYTES = 32768
@@ -36,9 +37,13 @@ class WorkerBootstrap(Boundary):
     configs: dict[str, LocalModelConfig | FrontierConfig]
     permits: dict[str, ExecutionPermit]
     policies: dict[str, AttemptPolicy]
+    timing_plan_sha256: Digest | None = None
+    timing_order_sha256: Digest | None = None
 
     @model_validator(mode="after")
     def bounded_configuration(self) -> WorkerBootstrap:
+        if (self.timing_plan_sha256 is None) != (self.timing_order_sha256 is None):
+            raise ValueError("timing_preregistration_pair_required")
         required = (set() if self.pin.arm == "regex" else
                     {"base", "finetuned"} if self.pin.arm == "finetuned" else {self.pin.arm})
         if any(set(mapping) != required for mapping in (self.configs, self.permits, self.policies)):
@@ -78,6 +83,29 @@ class ControlCommand(Boundary):
     kind: Literal["close", "cancel"]
     session_id: Identifier
     seq: Annotated[int, Field(ge=1)]
+
+
+class TimingCommand(Boundary):
+    kind: Literal["timing_identity", "timing_begin", "timing_finish"]
+    session_id: Identifier
+    seq: Annotated[int, Field(ge=1)]
+    request: TimingPhaseRequest | None = None
+    permit: TimingPhasePermit | None = None
+
+    @model_validator(mode="after")
+    def shape(self):
+        if ((self.kind == "timing_identity" and (self.request is not None or self.permit is not None))
+                or (self.kind != "timing_identity" and self.request is None)
+                or (self.kind == "timing_begin") != (self.permit is not None)):
+            raise ValueError("invalid_timing_command")
+        return self
+
+
+class BackendState(Boundary):
+    backend_instance_id: Identifier
+    physical_calls: Annotated[int, Field(ge=1, le=10000000)]
+    population_sha256: Digest
+    order_sha256: Digest
 
 
 class Diagnostic(Boundary):
@@ -125,14 +153,16 @@ class WorkerReply(Boundary):
     session_id: Identifier
     seq: Annotated[int, Field(ge=0)]
     status: Literal["ready", "preflight_ok", "sealed", "prediction", "closed", "cancelled",
-                    "budget_rejected", "error"]
+                    "budget_rejected", "error", "timing_identity", "timing_begun", "timing_finished"]
     prediction: Prediction | None = None
     events: Annotated[tuple[AttemptEvent, ...], Field(max_length=4)] = ()
+    backend_state: BackendState | None = None
     error_code: Literal["invalid_request", "unavailable", "cancelled", "worker_failure"] | None = None
 
     @model_validator(mode="after")
     def shape(self) -> WorkerReply:
-        if ((self.status == "prediction") != (self.prediction is not None)
+        if ((self.status == "timing_identity") != (self.backend_state is not None)
+                or (self.status == "prediction") != (self.prediction is not None)
                 or (self.status == "error") != (self.error_code is not None)):
             raise ValueError("invalid_worker_reply")
         return self
@@ -170,7 +200,7 @@ class BrokerReply(Boundary):
     status: Literal["ok", "budget_rejected", "failed", "reconciled_unknown"]
 
 
-Command = Annotated[InitCommand | RecordCommand | SealCommand | ControlCommand, Field(discriminator="kind")]
+Command = Annotated[InitCommand | RecordCommand | SealCommand | ControlCommand | TimingCommand, Field(discriminator="kind")]
 Response = Annotated[WorkerReply | ReserveRequest | ReconcileRequest, Field(discriminator="kind")]
 
 

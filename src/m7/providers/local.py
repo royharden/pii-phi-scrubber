@@ -160,6 +160,9 @@ class PermittedLocalBackend:
         self.allow_execution = allow_execution
         self._backend: LocalBackend | None = None
         self._lock = RLock()
+        self._warm_backend = None
+        self._warm_id = None
+        self._physical_calls = 0
 
     def check(self) -> None:
         if not self.allow_execution:
@@ -173,7 +176,18 @@ class PermittedLocalBackend:
             # Injected engines obey the same artifact boundary as real loaders.
             verify_artifacts(self.config)
             self._backend = self.loader(self.config)
+            from uuid import uuid4
+            self._warm_backend = self._backend
+            self._warm_id = "local-" + uuid4().hex
         return self._backend
+
+    def warm_state(self):
+        """Inspect existing instance only; never load or warm on demand."""
+        with self._lock:
+            self.check()
+            if self._backend is None or self._backend is not self._warm_backend or not self._physical_calls:
+                raise AdapterFault("unavailable")
+            return self._warm_id, self._physical_calls
 
     def preflight(self, records: tuple[LogRecord, ...]) -> None:
         with self._lock:
@@ -188,6 +202,7 @@ class PermittedLocalBackend:
             backend = self._ensure_loaded()
             backend.preflight(record.log.message)
             self.check()  # Loading/preflight may consume the remaining permit time.
+            self._physical_calls += 1
             result = backend.predict(record)
             if (not isinstance(result, TokenSpan) or result.truncated
                     or result.input_sha256 != record.content_sha256):

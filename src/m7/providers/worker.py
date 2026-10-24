@@ -19,10 +19,14 @@ from m7.contracts import LogRecord, Prediction, failure, validate_prediction
 from m7.data.access import IsolationGuard
 from m7.detectors.attempts import Ledger
 from m7.ledger import BudgetExceeded
+from m7.experiment.timing_contracts import (
+    TimingContinuationAuthority, TimingPhaseRequest, TimingPhasePermit, WarmBackendIdentity,
+)
 from .contracts import AdapterFault, CashReceipt, FrontierConfig, LocalModelConfig, config_digest
 from .parity import validate_pair
 from .worker_profile import WorkerProfile, validate_worker_membership
 from .worker_service import population_digest
+from .worker_timing import WarmBackendAttestor, WarmSessionMixin
 from .worker_transport import (
     IsolatedLauncher, OwnedWorker, WorkerLaunchPolicy, WorkerProcessVerifier, launch_spec,
 )
@@ -62,6 +66,11 @@ class WorkerSessionProtocol(Protocol):
 
     def preflight(self, records: tuple[LogRecord, ...]) -> None: ...
     def predict(self, record: LogRecord) -> Prediction: ...
+    def timing_identity(self) -> WarmBackendIdentity: ...
+    def bind_timing_authority(self, authority: TimingContinuationAuthority) -> None: ...
+    def begin_timing_phase(self, request: TimingPhaseRequest, permit: TimingPhasePermit, *,
+                           verify_receipt: Callable[[str, str], bool] | None = None) -> None: ...
+    def finish_timing_phase(self, request: TimingPhaseRequest) -> None: ...
     def cancel(self) -> None: ...
     def close(self) -> None: ...
 
@@ -80,15 +89,17 @@ def _file_pin(path: Path, digest: str) -> None:
         raise AdapterFault("permit_required")
 
 
-class WorkerSession:
+class WorkerSession(WarmSessionMixin):
     """One arm, one sealed input population and one logical-call cache per session.
 
-    Not a timing-pass API: cached results must never be represented as fresh timing
-    samples. D7 owns fresh-controller timing with an approved warmed backend.
+    Explicit timing continuation retains process/backend; primary cache replay
+    never counts as a fresh sample. D7 owns durable continuation authorization.
     """
 
     def __init__(self, bootstrap, policy, profile, process, guard, process_verifier, ledgers, *,
-                 reconcile_verifier=None, diagnostic_sink=None):
+                 reconcile_verifier=None, diagnostic_sink=None,
+                 timing_authority: TimingContinuationAuthority | None = None,
+                 warm_attestor: WarmBackendAttestor | None = None):
         self.bootstrap, self.policy, self.process = bootstrap, policy, process
         self.profile = profile
         self._approved_launch_sha256 = validate_worker_membership(profile, policy).launch_sha256
@@ -107,6 +118,8 @@ class WorkerSession:
         self._closed = False
         self._pending = {}
         self._attempts = {}
+        self._issued_attempt_ids = set()
+        self._request_issued_ids = set()
         self._population = None
         self._cache = {}
         self._cached_events = {}
@@ -115,6 +128,7 @@ class WorkerSession:
         self._reserve_requests = 0
         self._first_budget_denied = False
         self._rpc_seq = 0
+        self._init_timing(timing_authority, warm_attestor)
 
     def _guard(self):
         membership = validate_worker_membership(self.profile, self.policy)
@@ -164,12 +178,18 @@ class WorkerSession:
         policy, ledger = self.bootstrap.policies[self.arm], self.ledgers[self.arm]
         status = "failed"
         if isinstance(request, ReserveRequest):
+            if self._timing_active:
+                self._timing_current()
+                if not request.attempt_id.startswith('t-' + self._timing_request.attempt_namespace + '-'):
+                    raise AdapterFault('invalid_output')
             self._reserve_requests += 1
             ordinal = self._reserve_requests
-            if (request.attempt_id in self._attempts or ordinal > 1 + policy.max_transient_retries
+            if (request.attempt_id in self._issued_attempt_ids or ordinal > 1 + policy.max_transient_retries
                     or request.worst_case_micros != policy.worst_case_micros
                     or request.category != ("inference" if ordinal == 1 else "retry")):
                 raise AdapterFault("invalid_output")
+            self._issued_attempt_ids.add(request.attempt_id)
+            self._request_issued_ids.add(request.attempt_id)
             try:
                 ledger.reserve(request.attempt_id, request.worst_case_micros, category=request.category)
             except BudgetExceeded:
@@ -216,7 +236,10 @@ class WorkerSession:
 
     def _exchange(self, command, *, limit=MAX_RECORD_BYTES, startup=False) -> WorkerReply:
         self._guard()
+        if self._timing_active:
+            self._timing_current()
         self._request_attempts, self._rpc_seq = set(), 0
+        self._request_issued_ids = set()
         self._reserve_requests, self._first_budget_denied = 0, False
         deadline = min(self._born + self.bootstrap.limits.lifetime_seconds,
                        monotonic() + (self.policy.startup_timeout_seconds if startup
@@ -233,6 +256,8 @@ class WorkerSession:
                 raise AdapterFault("invalid_output")
             self._guard()
             reply = self._broker(message)
+            if self._timing_active:
+                self._timing_current()
             self.process.send(encode_line(reply, limit=MAX_RECORD_BYTES), deadline - monotonic())
         raise AdapterFault("invalid_output")
 
@@ -266,7 +291,20 @@ class WorkerSession:
 
     def _events(self, reply: WorkerReply, record: LogRecord):
         checked = []
+        reported = set()
         for event in reply.events:
+            if event.attempt.attempt_id in reported:
+                raise AdapterFault("invalid_output")
+            reported.add(event.attempt.attempt_id)
+            if self._timing_active and not event.attempt.attempt_id.startswith(
+                    't-' + self._timing_request.attempt_namespace + '-'):
+                raise AdapterFault("invalid_output")
+            if event.attempt.attempt_id not in self._request_attempts:
+                if event.attempt.attempt_id in self._issued_attempt_ids:
+                    # Denied reserve may be reported once by this same request.
+                    if event.attempt.attempt_id not in self._request_issued_ids:
+                        raise AdapterFault("invalid_output")
+                self._issued_attempt_ids.add(event.attempt.attempt_id)
             if (event.run_id != self.run_id or event.arm != self.arm or event.model_id != self.model_id
                     or event.record_id != record.record_id or event.content_sha256 != record.content_sha256):
                 raise AdapterFault("invalid_output")
@@ -320,6 +358,7 @@ class WorkerSession:
                 self._guard()
                 if self._population is None or self._population.get(record.record_id) != record.content_sha256:
                     raise AdapterFault("invalid_output")
+                self._timing_before(record)
                 if record.record_id in self._cache:
                     self.last_attempts = self._cached_events[record.record_id]
                     return self._cache[record.record_id]
@@ -333,10 +372,14 @@ class WorkerSession:
                 if reply.status == "budget_rejected" and self._first_budget_denied and not self._request_attempts:
                     self._budget_rejected.add(record.record_id)
                     self._cached_events[record.record_id] = self.last_attempts
+                    self._timing_terminal(record)
                     raise _InitialBudgetDenied("authorization_cap")  # Zero approved physical call.
                 if reply.status != "prediction" or reply.prediction is None:
                     raise AdapterFault("backend_failure")
                 candidate = reply.prediction
+                if self._timing_active and (not 1 <= len(self.last_attempts) <= 2
+                        or candidate.attempt_id != self.last_attempts[-1].attempt.attempt_id):
+                    raise AdapterFault("invalid_output")
                 if (candidate.run_id != self.run_id or candidate.arm != self.arm or candidate.model_id != self.model_id
                         or candidate.record_id != record.record_id or candidate.content_sha256 != record.content_sha256
                         or self.arm != "regex" and candidate.status == "ok" and not self._request_attempts):
@@ -359,6 +402,7 @@ class WorkerSession:
                     error_code="cancelled" if self._cancelled.is_set() else "backend_failure")
             self._cache[record.record_id] = result
             self._cached_events[record.record_id] = self.last_attempts
+            self._timing_terminal(record)
             return result
 
     __call__ = predict
@@ -426,7 +470,9 @@ def launch_worker(bootstrap: WorkerBootstrap, policy: WorkerLaunchPolicy, *,
                   process_verifier: WorkerProcessVerifier, ledgers: Mapping[str, Ledger],
                   allow_execution: bool = False,
                   reconcile_verifier: Callable[[ReconcileRequest], CashReceipt | None] | None = None,
-                  diagnostic_sink: Callable[[dict], None] | None = None) -> WorkerSession:
+                  diagnostic_sink: Callable[[dict], None] | None = None,
+                  timing_authority: TimingContinuationAuthority | None = None,
+                  warm_attestor: WarmBackendAttestor | None = None) -> WorkerSession:
     """Explicit future activation only; no default native launcher or verifier.
 
     Validate/construct models without calling this function during construction.
@@ -458,7 +504,8 @@ def launch_worker(bootstrap: WorkerBootstrap, policy: WorkerLaunchPolicy, *,
     session = None
     try:
         session = WorkerSession(bootstrap, policy, profile, process, isolation_guard, process_verifier, ledgers,
-                               reconcile_verifier=reconcile_verifier, diagnostic_sink=diagnostic_sink)
+                               reconcile_verifier=reconcile_verifier, diagnostic_sink=diagnostic_sink,
+                               timing_authority=timing_authority, warm_attestor=warm_attestor)
         if type(process.pid) is not int or process.pid <= 0:
             raise AdapterFault("permit_required")
         reply = session._exchange(InitCommand(session_id=bootstrap.session_id, bootstrap=bootstrap),
