@@ -118,8 +118,9 @@ def make_record(message: str, record_id: str, split_id: str = 'development', *, 
     return LogRecord(record_id=record_id, split_id=split_id, content_sha256=message_hash(message), log=LogFields(timestamp=timestamp, level=level, event=event, message=message))
 
 
-def failure(record: LogRecord, *, run_id: str, arm: Arm, model_id: str, error_code: str = 'invalid_output', status: str = 'invalid_output', attempt_id: str = 'attempt-1') -> Prediction:
-    return Prediction(run_id=run_id, record_id=record.record_id, content_sha256=record.content_sha256, arm=arm, model_id=model_id, attempt_id=attempt_id, status=status, error_code=error_code)
+def failure(record: LogRecord, *, run_id: str, arm: Arm, model_id: str, error_code: str = 'invalid_output', status: str = 'invalid_output', attempt_id: str = 'attempt-1', duration_ms: float | None = None, usage_ref: str | None = None) -> Prediction:
+    # Terminal failures keep caller-measured timing/usage; unmeasured stays null.
+    return Prediction(run_id=run_id, record_id=record.record_id, content_sha256=record.content_sha256, arm=arm, model_id=model_id, attempt_id=attempt_id, status=status, error_code=error_code, duration_ms=duration_ms, usage_ref=usage_ref)
 
 
 def validate_prediction(record: LogRecord, prediction: Prediction) -> Prediction:
@@ -129,5 +130,5 @@ def validate_prediction(record: LogRecord, prediction: Prediction) -> Prediction
     elif any(s.end > len(record.log.message) for s in prediction.spans):
         code = 'invalid_bounds'
     if code:
-        return failure(record, run_id=prediction.run_id, arm=prediction.arm, model_id=prediction.model_id, attempt_id=prediction.attempt_id, error_code=code)
+        return failure(record, run_id=prediction.run_id, arm=prediction.arm, model_id=prediction.model_id, attempt_id=prediction.attempt_id, error_code=code, duration_ms=prediction.duration_ms, usage_ref=prediction.usage_ref)
     return prediction

@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from m7.contracts import LogFields, LogRecord, Prediction, Span, message_hash, make_record, validate_prediction
+from m7.contracts import LogFields, LogRecord, Prediction, Span, failure, message_hash, make_record, validate_prediction
 
 FIXTURE = Path(__file__).resolve().parents[2] / "data-development" / "public-fictional.json"
 ZERO_DIGEST = "0" * 64
@@ -49,6 +49,48 @@ def test_prediction_hash_disagreement_is_terminal_identity_mismatch():
     prediction = ok_prediction(record, [Span(start=8, end=18, label="NAME")], content_sha256=ZERO_DIGEST)
     result = validate_prediction(record, prediction)
     assert (result.status, result.error_code, result.spans) == ("invalid_output", "identity_mismatch", ())
+
+
+# --- terminal failures keep measured timing/usage (R2) ----------------------------------
+
+def test_failure_defaults_leave_timing_and_usage_null():
+    record = make_record("person: Tova Quill", "r-1")
+    result = failure(record, run_id="run-1", arm="base", model_id="base-v1")
+    # Unmeasured timing is null, never 0.
+    assert (result.status, result.error_code, result.duration_ms, result.usage_ref) == \
+        ("invalid_output", "invalid_output", None, None)
+
+
+def test_failure_carries_caller_supplied_duration_and_usage():
+    record = make_record("person: Tova Quill", "r-1")
+    result = failure(record, run_id="run-1", arm="frontier", model_id="frontier-v1", status="failed",
+                     error_code="backend_failure", attempt_id="attempt-2", duration_ms=412.5, usage_ref="usage-77")
+    assert (result.status, result.error_code, result.attempt_id, result.duration_ms, result.usage_ref, result.spans) == \
+        ("failed", "backend_failure", "attempt-2", 412.5, "usage-77", ())
+
+
+def test_failure_still_rejects_negative_or_nonfinite_duration():
+    record = make_record("x", "r-1")
+    for bad in (-1.0, float("inf"), float("nan")):
+        with pytest.raises(ValidationError):
+            failure(record, run_id="run-1", arm="base", model_id="base-v1", duration_ms=bad)
+
+
+def test_terminal_rejection_preserves_measured_duration_and_usage():
+    # Out-of-range end 19 on an 18 cp message: spans dropped, but the attempt really ran for 37.25 ms.
+    record = make_record("person: Tova Quill", "r-1")
+    prediction = ok_prediction(record, [Span(start=8, end=19, label="NAME")], duration_ms=37.25, usage_ref="usage-9")
+    result = validate_prediction(record, prediction)
+    assert (result.error_code, result.spans, result.duration_ms, result.usage_ref, result.attempt_id) == \
+        ("invalid_bounds", (), 37.25, "usage-9", "attempt-1")
+
+
+def test_identity_mismatch_rejection_also_preserves_measured_duration_and_usage():
+    # The call consumed 5.5 ms/usage-3 even though its hash disagrees; the cost stays with this attempt.
+    record = make_record("person: Tova Quill", "r-1")
+    prediction = ok_prediction(record, content_sha256=ZERO_DIGEST, duration_ms=5.5, usage_ref="usage-3")
+    result = validate_prediction(record, prediction)
+    assert (result.error_code, result.duration_ms, result.usage_ref) == ("identity_mismatch", 5.5, "usage-3")
 
 
 # --- span bounds -------------------------------------------------------------------
