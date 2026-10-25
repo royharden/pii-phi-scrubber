@@ -51,7 +51,8 @@ def test_second_open_is_refused_after_restart(tmp_path):
 
 def test_fresh_run_consumes_open_once_and_closed_rerun_calls_nothing(tmp_path):
     calls, flags = [], []
-    authorize = lambda locked, already_opened: flags.append(already_opened)
+    def authorize(locked, already_opened):
+        flags.append(already_opened)
     directory = tmp_path / 'journal'
     execute_edition(edition(), records(), gold_channel(), regex_registry(calls),
                     EditionJournal(directory), authorize=authorize)
