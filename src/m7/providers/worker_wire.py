@@ -190,6 +190,8 @@ class ReconcileRequest(Boundary):
     state: Literal["succeeded", "failed", "cancelled", "unknown"]
     usage_units: Annotated[int, Field(ge=0, le=524288)] | None = None
     receipt_id: Identifier | None = None
+    # Worker-reported operation wall time is a compute proxy, never cash evidence.
+    compute_seconds: Annotated[float, Field(ge=0, le=10**9, allow_inf_nan=False)] | None = None
 
 
 class BrokerReply(Boundary):
