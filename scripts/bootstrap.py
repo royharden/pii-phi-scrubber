@@ -27,6 +27,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.exit(2, f"Expected uv {UV_VERSION}; found {' '.join(actual_uv)}.\n")
     python_version = (ROOT / ".python-version").read_text(encoding="utf-8").strip()
     env = dict(os.environ)
+    # This checkout owns both interpreter selection and the target environment.
+    # Ignore inherited selectors without inspecting another environment.
+    env.pop("VIRTUAL_ENV", None)
+    env.pop("UV_PYTHON", None)
     env["UV_PYTHON_INSTALL_DIR"] = str(ROOT / ".agent-work" / "python")
     env["UV_PROJECT_ENVIRONMENT"] = str(ROOT / ".venv")
     env["UV_CACHE_DIR"] = str(ROOT / ".agent-work" / "uv-cache")
@@ -39,7 +43,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         managed = Path(
             subprocess.check_output(
-                [uv, "--no-config", "python", "find", "--managed-python", python_version],
+                [
+                    uv,
+                    "--no-config",
+                    "python",
+                    "find",
+                    "--system",
+                    "--managed-python",
+                    "--no-project",
+                    python_version,
+                ],
                 env=env,
                 text=True,
             ).strip()
