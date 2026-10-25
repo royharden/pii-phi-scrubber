@@ -39,8 +39,11 @@ def _seconds(value: object) -> float:
 
 
 def _has_compute(categories: dict) -> bool:
-    return all(isinstance(categories.get(c), dict) and 'known_compute_seconds' in categories[c]
-               for c in CATEGORIES)
+    keys = ('known_compute_seconds', 'unknown_compute_attempts')
+    supplied = [key in categories.get(category, {}) for category in CATEGORIES for key in keys]
+    if any(supplied) and not all(supplied):
+        raise ValueError('complete_compute_summary_required')
+    return all(supplied)
 
 
 def cost_report(summary: dict | None, allocation: EconomicAllocation | None = None) -> dict:
