@@ -6,7 +6,7 @@ rewritten after the fact. All lineage hashes below are hand-chosen constants
 (`h("a")` = 64 x "a"); `digest` is only used to construct the inputs that bind
 them, never to compute an expected assertion value.
 """
-from datetime import datetime, timezone
+from datetime import datetime
 import json
 
 import pytest
