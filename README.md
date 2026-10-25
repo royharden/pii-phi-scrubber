@@ -39,8 +39,9 @@ separately through your approved public-package workflow.
 Bootstrap installs the locked build group first, then builds the editable package
 without an isolated resolver. It never updates the lock, installs model libraries,
 downloads model weights, loads credential files or calls a provider. `-Check` /
-`--check` performs no installation and verifies the interpreter and every package
-version in the lock. A fresh bootstrap needs internet access to public Python/PyPI
+`--check` performs no installation and verifies the interpreter, installed project
+and locked dependency versions selected for its platform, including the `dev` extra
+and `build` group. A fresh bootstrap needs internet access to public Python/PyPI
 artifacts; a fully populated cache can support subsequent offline checks. Changing
 pins is an explicit maintenance action requiring a new lock and validation.
 

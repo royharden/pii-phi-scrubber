@@ -82,17 +82,74 @@ def main(argv: list[str] | None = None) -> int:
         check=True,
     )
     lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
-    pins = {p["name"]: p["version"] for p in lock["package"]}
-    verify = (
-        "import importlib.metadata as m,json,platform,sys; "
-        "pins=json.loads(sys.argv[2]); "
-        "assert platform.python_version()==sys.argv[1], 'Python pin mismatch'; "
-        "bad={n:(v,m.version(n)) for n,v in pins.items() if m.version(n)!=v}; "
-        "assert not bad, 'Dependency pin mismatch: '+str(bad); "
-        "print('Verified Python '+platform.python_version()+' and '+str(len(pins))+' locked packages')"
+    project = next(p for p in lock["package"] if p.get("source", {}).get("editable") == ".")
+    packaging_version = next(p["version"] for p in lock["package"] if p["name"] == "packaging")
+    # Let pinned uv select the dependency graph/extras/groups; its universal export
+    # retains platform markers, which must be evaluated by the target interpreter.
+    requirements = subprocess.check_output(
+        [
+            uv,
+            "--no-config",
+            "export",
+            "--project",
+            str(ROOT),
+            "--locked",
+            "--offline",
+            "--extra",
+            "dev",
+            "--group",
+            "build",
+            "--no-emit-project",
+            "--no-header",
+            "--no-annotate",
+            "--no-hashes",
+            "--format",
+            "requirements.txt",
+            "--python",
+            str(interpreter),
+        ],
+        env=env,
+        text=True,
     )
+    verify = """
+import importlib.metadata as m
+import json
+import platform
+import sys
+
+assert platform.python_version() == sys.argv[1], 'Python pin mismatch'
+# packaging is already a locked build dependency. Refuse drift before using it.
+assert m.version('packaging') == sys.argv[4], 'Dependency pin mismatch: packaging'
+from packaging.requirements import Requirement
+
+pins = json.loads(sys.argv[3])
+for line in sys.argv[2].splitlines():
+    if not line.strip():
+        continue
+    requirement = Requirement(line)
+    if requirement.marker is not None and not requirement.marker.evaluate():
+        continue
+    specs = list(requirement.specifier)
+    assert not requirement.url and len(specs) == 1 and specs[0].operator == '==', 'Expected locked pin'
+    pins[requirement.name] = specs[0].version
+installed = {name: m.version(name) for name in pins}
+bad = {name: (pin, installed[name]) for name, pin in pins.items() if installed[name] != pin}
+assert not bad, 'Dependency pin mismatch: ' + str(bad)
+print('Verified Python ' + platform.python_version() + ' and ' + str(len(pins)) + ' locked packages')
+"""
     subprocess.run(
-        [str(interpreter), "-I", "-c", verify, python_version, json.dumps(pins)], env=env, check=True
+        [
+            str(interpreter),
+            "-I",
+            "-c",
+            verify,
+            python_version,
+            requirements,
+            json.dumps({project["name"]: project["version"]}),
+            packaging_version,
+        ],
+        env=env,
+        check=True,
     )
     return 0
 
