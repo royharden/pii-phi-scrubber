@@ -1,17 +1,16 @@
 """Explicit future three-pass timing; no calls, filesystem or clocks on import."""
 from __future__ import annotations
 
-import json
 import math
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
-from typing import Annotated, Callable, Literal, Mapping
+from typing import Callable, Literal, Mapping
 
-from pydantic import Field, model_validator
+from pydantic import model_validator
 
-from m7.contracts import Arm, Boundary, Digest, Identifier, LogRecord, Prediction, validate_prediction
+from m7.contracts import Boundary, Digest, Identifier, LogRecord, Prediction, validate_prediction
 from m7.render import render
 
 from .executor import AdapterBinding, read_attempt_metadata

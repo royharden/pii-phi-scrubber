@@ -7,7 +7,6 @@ from _common import ROOT, approved_result, copy_approved_report, emit, guarded, 
 from m7.contracts import LogRecord, Span
 from m7.detectors.regex import detect_regex
 from m7.publish import artifact_is_safe, gate_record, write_report
-from m7.render import render
 from m7.runner import EvaluationRecord, run_offline
 
 
