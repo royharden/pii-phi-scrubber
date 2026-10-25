@@ -1,8 +1,10 @@
 # Limits and unresolved evidence
 
-Runtime is unverified. A hand-derived test suite exists under `tests/` but has never
-been run. No model inference, training, controlled timing, sealed evaluation or
-independent product acceptance occurred during source construction.
+R03 has executed local synthetic tests and public development controls on a
+combined candidate: see [validation](VALIDATION.md) for scope and evidence.
+Actual frontier/base/fine-tuned model inference, training, controlled real-model
+timing, sealed evaluation and independent product acceptance remain unperformed.
+Passing fixture/test-double checks does not close those experiment gates.
 
 Only English fictional NAME, EMAIL, PHONE and ACCOUNT_ID in one decoded JSON message
 are supported. Offsets use Python Unicode codepoints without normalization. The bound
@@ -22,9 +24,11 @@ Unmeasured arms, absent costs and insufficient cluster intervals are unknown, no
 The report labels them `not measured`, `unknown` and `insufficient`; a metric with a
 zero denominator reads `N/A (0/0)`. The adoption floor table shows an undefined
 fine-tuned precision or recall as `N/A (n/d)` and an undefined lower recall bound
-as `not measured`. The harm-rate
-Lower95/Upper95 columns and the paired class/micro difference table have no
-interval-state column, so an insufficient interval there also reads `not measured`.
+as `not measured`. In the reviewed R03 source candidate, the harm-rate and paired
+class/micro difference tables also include an Interval column with fixed wording
+for a defined interval, insufficient blocks, insufficient valid draws or no measurement.
+Partially supplied category compute metadata is rejected; fully absent legacy
+metadata stays unknown. Compute time is never converted into a cost figure.
 Fine-tuning can lose to the baseline; no model improvement is promised.
 
 The mechanical split auditor checks only declared ancestor tokens and components.
@@ -36,7 +40,8 @@ must examine the actual pinned artifacts and custody process.
 The sealed activation path requires an externally provisioned trusted operator host,
 authenticated D4 native-isolation/file-policy capability and D5 pre-test target lock.
 No OS enforcement, receipt issuer, provider-aware tokenizer or approved environment
-is fabricated here. The source interfaces have not been runtime-qualified together.
+is fabricated here. Synthetic integration tests do not qualify these interfaces
+against an actual trusted host, provider or native enforcement boundary.
 Uncertain journal begins cannot be retried; abandoned writer locks and torn writes
 require authorized investigation. Timing interruptions remain incomplete rather than
 silently rerunning passes. Cold initialization excludes unverified process/OS cache

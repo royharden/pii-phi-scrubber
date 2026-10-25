@@ -1,9 +1,10 @@
 # Offline two-minute journey
 
-Source only: no rehearsal or measured four-arm report has occurred, and the
-development report itself has never been generated. Tests for the gate, suppression
-and report paths exist under `tests/` but have not been run. After Dirty Mode closes,
-validate the environment and the following behavior before claiming a demo.
+R03 public development controls have exercised the keyless CLI journey and generated
+development HTML through the demo/eval entrypoints. The combined candidate also
+passed local gate, suppression and report tests; see [validation](VALIDATION.md).
+This is a synthetic development journey, not a measured four-arm experiment or a
+timed two-minute rehearsal. Final main integration remains an INT decision.
 
 The development path runs only the public fictional fixture. Its eight examples are
 one development block. Regex is a deterministic baseline; frontier/base/fine remain
@@ -19,8 +20,9 @@ python scripts/demo.py --offline --approved-report path/to/approved/index.html `
   --report-sha256 <externally-recorded-approved-html-sha256> --out report/replay.html
 ```
 
-The output filename must be new. Missing/mismatched hashes fail closed. No generated
-report or successful experiment is included just to make this command look runnable.
+The output filename must be new. Missing/mismatched hashes fail closed. This replay
+command requires an independently approved report and its actual recorded hash;
+R03 public development output does not supply a measured four-arm experiment.
 
 Suggested rehearsal after actual safe results exist:
 
