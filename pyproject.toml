@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.25,<2"]
+requires = ["hatchling==1.27.0", "editables==0.5"]
 build-backend = "hatchling.build"
 
 [project]
@@ -7,12 +7,15 @@ name = "m7-synthetic-log-redaction"
 version = "0.1.0"
 description = "A bounded synthetic-log redaction experiment scaffold"
 readme = "README.md"
-requires-python = ">=3.12"
-dependencies = ["pydantic>=2.9,<3"]
+requires-python = ">=3.12,<3.13"
+dependencies = ["pydantic==2.12.3"]
 license = "MIT"
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<9", "ruff>=0.8,<1"]
+dev = ["pytest==8.4.2", "ruff==0.14.2"]
+
+[dependency-groups]
+build = ["hatchling==1.27.0", "editables==0.5"]
 
 [tool.hatch.build]
 exclude = ["*.bak-*"]

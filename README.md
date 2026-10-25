@@ -2,7 +2,7 @@
 
 Source is written for the assigned implementation packages. The trusted operator
 host and the real receipt, native-isolation and provider services it depends on are
-not part of this checkout, and **runtime and scientific outcomes remain unverified**. Nothing in this checkout
+not part of this checkout, and **scientific outcomes remain unverified**. Nothing in this checkout
 establishes actual training, model inference, sealed evaluation, timing, spending,
 privacy protection or product acceptance. A negative measured result is valid.
 
@@ -11,12 +11,46 @@ JSON `message`, at most 1,024 Python Unicode codepoints. The other three log fie
 are preserved. This is a bounded local experiment with CLI/static reports. It is
 not a real PHI processor, upload service or compliance product.
 
-## Intended journeys after runtime activation is authorized
+## Reproducible development environment
 
-The commands below describe future use. They have not been run during Dirty Mode.
-Use an independently approved, locked Python 3.12+/Pydantic 2 environment. Optional
-model libraries and exact versions must be approved/staged separately; the source
-never installs dependencies or downloads weights. No `uv.lock` is fabricated.
+Prerequisites: Python 3.11+ for the stdlib bootstrap launcher and **uv 0.11.19**
+on PATH. The product interpreter is **CPython 3.12.13** (`.python-version`).
+`uv.lock` pins runtime, test, lint and build dependencies, including their artifact
+hashes. The initial lock selects Pydantic 2.12.3, pytest 8.4.2, Ruff 0.14.2,
+Hatchling 1.27.0 and editables 0.5.
+
+From the checkout, run:
+
+```powershell
+.\scripts\bootstrap.ps1
+.\scripts\bootstrap.ps1 -Check
+.\.venv\Scripts\python.exe -m pytest --junitxml .agent-work/pytest.xml
+.\.venv\Scripts\ruff.exe check scripts/bootstrap.py
+```
+
+The cross-platform equivalent is `python scripts/bootstrap.py`, followed by
+`python scripts/bootstrap.py --check`; on POSIX use `.venv/bin/python` for tests.
+Bootstrap resolves its checkout from the script path, so it also works from another
+directory. It downloads Python into `.agent-work/python`, uses `.agent-work/uv-cache`
+and creates `.venv` in that checkout. It does not create a global Python shim or
+registry entry. Every invocation requires the exact uv version; install that tool
+separately through your approved public-package workflow.
+
+Bootstrap installs the locked build group first, then builds the editable package
+without an isolated resolver. It never updates the lock, installs model libraries,
+downloads model weights, loads credential files or calls a provider. `-Check` /
+`--check` performs no installation and verifies the interpreter and every package
+version in the lock. A fresh bootstrap needs internet access to public Python/PyPI
+artifacts; a fully populated cache can support subsequent offline checks. Changing
+pins is an explicit maintenance action requiring a new lock and validation.
+
+## Offline development journeys
+
+The commands below use the bootstrapped interpreter (`.venv/Scripts/python.exe` on
+Windows, `.venv/bin/python` on POSIX), rather than an unrelated system Python.
+Optional model libraries and exact versions must be approved/staged separately;
+the offline commands never install or download weights. Historical Dirty Mode
+construction did not execute them; current run evidence is recorded separately.
 
 Public fictional development fixture, with a deliberately scored and suppressed miss:
 
@@ -218,7 +252,7 @@ always refuses. Without real host services, `--operator-host
 m7.host.unavailable:campaign_host` (or `scripts/train.py campaign --training-host
 m7.host.unavailable:training_host`) is designed to report `status: unavailable`,
 which is the honest blocked state of this build. Like everything else here, this
-path has not been run.
+path requires separate execution evidence.
 
 ## Tests
 
@@ -227,13 +261,13 @@ reservation ledger, the offline runner, detectors, providers, training, corpus
 custody data, the experiment journal and result projection, publication gates and
 the static report.
 Expected values are derived by hand from the plan and contracts and the derivation
-is written beside each case. **None of these tests has ever been run**, and no
-product import has happened. A first-run failure must be traced against the plan
-before either the code or the expectation is changed. To run them later, in a
-locked Python 3.12 + Pydantic 2 + pytest 8 environment, from this directory:
+is written beside each case. These were inherited as unexecuted source from Dirty
+Mode; the R03 team now runs them in the locked environment above. A failure must
+be traced against the plan before either code or expectation changes. Reviewers
+own regression/evaluation tests and independent verdicts. From this directory:
 
 ```powershell
-pytest
+.venv/Scripts/python.exe -m pytest
 ```
 
 `pyproject.toml` sets `pythonpath = ["src"]` and `testpaths = ["tests"]`. Paths
@@ -249,12 +283,13 @@ computed). None is zero.
 
 ## Still required
 
-A locked environment and meaningful runtime/import/Unicode/wire/scorer/journal/budget/
+Meaningful runtime/import/Unicode/wire/scorer/journal/budget/
 privacy/integration checks; actual platform-enforced custody and independent audit;
 licensed immutable models/data and approved resource/provider terms; actual bounded
 training, dev locks, four real arms, controlled timing and reconciled receipts;
 clean offline rehearsal and nonauthoring finished-product acceptance. No CI,
-container/environment/deployment scaffolding, remote or publication is supplied.
+container/deployment scaffolding, remote or publication is supplied. The locked
+development bootstrap above does not establish scientific or product acceptance.
 
 Newly authored source is MIT. Model/data/dependency rights are separate; see
 [VENDORED.md](VENDORED.md). The shell's historical name expands none of this scope.
