@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, TYPE_CHECKING
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from m7.contracts import Arm, Boundary, Digest
 from .models import ARMS, LockedEdition, commitment
@@ -103,11 +103,12 @@ class ExperimentReadiness(Boundary):
     accounting: tuple[ArmAccounting, ...] = ()
     cost: ReadinessCost = ReadinessCost()
 
-    @model_validator(mode='before')
+    @field_validator('actual_model_execution', 'execution_allowed', 'product_acceptance', mode='before')
     @classmethod
     def no_execution_claims(cls, value):
-        if isinstance(value, dict) and any(value.get(key, False) is not False for key in
-                ('actual_model_execution', 'execution_allowed', 'product_acceptance')):
+        # Field-level validation preserves strict JSON array-to-tuple semantics.
+        # A model-before hook would switch the whole JSON object to Python mode.
+        if value is not False:
             raise ValueError('readiness_cannot_claim_execution_or_acceptance')
         return value
 
@@ -128,6 +129,7 @@ def _check(name, state, digest=None):
 
 
 def assess_readiness(*, component_facts: tuple[ComponentFact, ...] = (),
+                     provider_facts=None, training_facts=None,
                      training_plan: dict | None = None, training_permit: dict | None = None,
                      edition: LockedEdition | None = None,
                      authorization: EvaluationAuthorization | None = None,
@@ -141,6 +143,7 @@ def assess_readiness(*, component_facts: tuple[ComponentFact, ...] = (),
     Even complete structural inputs retain H1-H6 and cannot cause execution.
     """
     facts = tuple(ComponentFact.model_validate_json(row.model_dump_json()) for row in component_facts)
+    facts += _producer_facts(provider_facts, training_facts)
     if len({row.component for row in facts}) != len(facts):
         raise ValueError('duplicate_readiness_component')
     by_component = {row.component: row for row in facts}
@@ -211,6 +214,49 @@ def assess_readiness(*, component_facts: tuple[ComponentFact, ...] = (),
     checks.extend(_check(hold, 'held') for hold in HOLDS)
     return ExperimentReadiness(evidence_kind=evidence_kind, checks=tuple(checks),
         blockers=tuple(row.name for row in checks if row.state != 'shape_valid'), accounting=accounting, cost=cost)
+
+
+def _producer_facts(provider, training) -> tuple[ComponentFact, ...]:
+    """Consume producer-owned schemas; never inspect artifacts or start backends.
+
+    Imports occur only for an explicitly supplied report, so missing producers are
+    ordinary missing evidence while their independent implementation is pending.
+    """
+    facts = []
+    if provider is not None:
+        try:
+            from m7.providers.readiness import ProviderFacts
+            if not isinstance(provider, ProviderFacts):
+                raise ValueError('canonical_provider_facts_required')
+            report = ProviderFacts.model_validate_json(provider.model_dump_json())
+            if report.actual_model_execution is not False or report.execution_allowed is not False:
+                raise ValueError('producer_cannot_grant_execution')
+            states = tuple(row.status for row in report.arms)
+            state = ('invalid' if 'invalid' in states else 'missing' if 'missing' in states
+                     else 'shape_valid' if states == ('shape_valid',) * 3 else 'invalid')
+            facts.append(ComponentFact(component='providers', state=state,
+                evidence_sha256=commitment(report.model_dump(mode='json'))))
+        except Exception:
+            facts.append(ComponentFact(component='providers', state='invalid'))
+    if training is not None:
+        try:
+            from m7.training.readiness import TrainingArtifactFacts
+            if not isinstance(training, TrainingArtifactFacts):
+                raise ValueError('canonical_training_facts_required')
+            report = TrainingArtifactFacts.model_validate_json(training.model_dump_json())
+            if (report.actual_training_observed is not False or report.execution_allowed_now is not False
+                    or report.m7_02_accepted is not False):
+                raise ValueError('producer_cannot_grant_training_acceptance')
+            digest = commitment(report.model_dump(mode='json'))
+            artifacts = {'not_inspected': 'held', 'missing': 'missing',
+                         'invalid': 'invalid', 'verified': 'shape_valid'}[report.artifact_status]
+            plan = {'missing_plan': 'missing', 'missing_permit': 'missing',
+                    'invalid': 'invalid', 'validated': 'shape_valid'}[report.input_status]
+            facts.extend((ComponentFact(component='artifacts', state=artifacts, evidence_sha256=digest),
+                          ComponentFact(component='training', state=plan, evidence_sha256=digest)))
+        except Exception:
+            facts.extend(ComponentFact(component=name, state='invalid') for name in ('artifacts', 'training'))
+    return tuple(facts)
 
 
 __all__ = ['ComponentFact', 'ReadinessCheck', 'ArmAccounting', 'ReadinessCost',
