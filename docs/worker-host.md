@@ -68,6 +68,34 @@ process controls. Additional requested memory/CPU/UI/mitigation controls it does
 set must fail actual host qualification, never be claimed present. Unsupported
 platform/job nesting/privilege contexts fail without a fallback.
 
+## Worker compute telemetry and parent accounting
+
+The child ledger proxy accepts `RemoteLedger.reconcile(..., compute_seconds=...)`.
+It carries the value in the optional `ReconcileRequest.compute_seconds` wire field;
+the parent `WorkerSession` broker forwards it to its `ReservationLedger.reconcile`.
+Legacy omission and explicit JSON `null` mean unknown compute time. Numeric zero
+means a known zero time proxy. Supplied numbers must be finite and in the inclusive
+range 0 to 1,000,000,000 seconds; booleans, numeric strings, negative or nonfinite
+values and values above that bound are rejected by the strict wire schema. See the
+[wire contract](../contracts/adapters/worker-wire.md) for the accounting boundary.
+
+This worker-reported operation wall time is a compute proxy. It does not attest
+native process activity, CPU/GPU consumption, warm timing qualification or economic
+cost. Unknown compute must remain distinct from measured zero. The parent ledger
+stores known seconds and unknown-attempt counts separately under its existing
+reconciliation and replay/conflict rules.
+
+The host's `reconcile_verifier` remains the only route for authenticating actual
+cash and receipt identity: the parent requires a matching `CashReceipt`. A known
+compute value never makes child cash claims trustworthy or clears unresolved
+liability. Missing/invalid cash evidence preserves the reservation's unresolved
+liability, independently of compute telemetry. No new path, credential, custody or
+gold access, process authority, or execution permission is added by this field.
+This contract describes source behavior; it does not establish real worker/native,
+provider or model execution.
+
+## Fixed worker runtime
+
 `FixedWorkerFactory(frontier_runtime=None)` is fixed application source for all arms.
 Only the active adapter and RemoteLedger are constructed. Fine's immutable base
 configuration is parity metadata only: no inactive path read/probe/loader/registry/

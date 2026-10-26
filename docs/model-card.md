@@ -1,7 +1,10 @@
 # Model and experiment card — development scaffold
 
-No trained artifact is supplied. No frontier, base or fine-tuned arm has executed in
-this construction. The regex source is a development baseline, not validated privacy
+No trained artifact is supplied. No actual frontier, base or fine-tuned model has
+executed. R03 has exercised the deterministic regex development
+path and synthetic test doubles; see [validation](VALIDATION.md). Those checks are
+not executions of real frontier/base/fine-tuned models. Regex remains a development
+baseline, not validated privacy
 protection. No superiority or adoption recommendation is established.
 
 The candidate architecture in the selected plan is GLiNER small v2.1. Its immutable
@@ -27,14 +30,18 @@ overlaps and wrong labels receive no exact credit. Failure and unavailable recor
 remain in the intended population. Entirely unrun arms have null metrics (reported
 as `not measured`). Undefined classes remain null (`N/A` with numerator/denominator; an
 undefined macro shows how many classes are defined)
-and insufficient bootstrap units leave intervals undefined (`insufficient` where the report has an Interval column). Normal/challenge comparisons
-do not isolate template novelty from entity novelty. Costs/timing are unmeasured.
+and insufficient bootstrap units leave intervals undefined (`insufficient` in the
+Interval columns, including the reviewed R03 harm and paired class/micro tables).
+Normal/challenge comparisons do not isolate template novelty from entity novelty.
+Actual experiment costs and real-model timing remain unmeasured; synthetic ledger
+and timing tests do not constitute paid usage, invoices or model-speed results.
 
 Source now implements those future reports: unconditional and successful-only
 diagnostics, whole-block paired 95% intervals with explicit undefined-draw counts,
 complete training/inference cash and liability projections, fixed concurrency-one
 three-pass timing with cold/warm separation, and D5 pre-test locked class/adoption
-targets. All actual outcomes remain unrun. A failed or unknown gate retains a
+targets. These paths have local synthetic coverage; actual trained-model and sealed
+four-arm outcomes remain unrun. A failed or unknown gate retains a
 no-deployment recommendation; a positive engineering result is only a candidate
 for nonauthoring finished-product review. Full OS-enforced custody and real receipt
 authentication are required operator integrations, not supplied fake implementations.

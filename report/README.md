@@ -1,7 +1,9 @@
 # Static report destination
 
-No measured result is committed here. Future offline demo/eval commands write a new
-HTML path explicitly chosen by the operator. Existing artifacts are never overwritten.
+No measured held-out four-arm result is committed here. R03 public development
+controls generated HTML through the keyless demo/eval entrypoints on a combined
+candidate; see [validation](../docs/VALIDATION.md) for the evidence boundary.
+Commands write a new HTML path explicitly chosen by the operator. Existing artifacts are never overwritten.
 The report contains only whitelisted numeric aggregates and separately supplied
 gold-gated development cards; loaded result publication fields are not trusted.
 Raw held-out source, gold span tables and provider outputs must remain excluded.
@@ -12,3 +14,5 @@ nothing is written. Upstream measurements are unchanged either way.
 Cell wording: `N/A (n/d)` (zero denominator; macro counts defined classes),
 `insufficient` (in an Interval column: too few blocks or valid draws), `unknown` (unreconciled cost
 status), `not measured` (no value available: never run, not reconciled or not computed).
+The reviewed R03 source adds Interval-state cells to the harm-rate and paired
+class/micro tables; these use fixed wording rather than arbitrary diagnostic text.

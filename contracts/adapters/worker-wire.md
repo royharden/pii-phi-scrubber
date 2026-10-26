@@ -101,6 +101,27 @@ session. A sent/uncertain call, timeout/crash or rejected retry becomes failed/c
 Prediction with unresolved liability. Ledger errors never silently reopen a call.
 
 Child cash claims never release parent liability without a parent receipt verifier.
+`ReconcileRequest.compute_seconds` is optional and defaults to `None`. Legacy
+messages that omit it and messages with JSON `null` both mean unknown compute time;
+numeric zero means a known zero time proxy. A supplied number must be finite and
+within `0 <= compute_seconds <= 1_000_000_000`; strict validation rejects booleans,
+numeric strings, negative values, overflow, NaN and infinity. Existing byte limits,
+session/sequence checks and reservation ownership still apply.
+
+`RemoteLedger.reconcile(..., compute_seconds=...)` sends the value on the strict
+wire. The parent `WorkerSession` broker passes it to
+`ReservationLedger.reconcile` for the current reserved attempt. It is worker-reported
+operation wall time, not authenticated CPU/GPU usage, a native timing attestation,
+or an economic cost. Omission/null does not fabricate a zero measurement. The
+parent ledger retains its existing replay/conflict rules and exposes known compute
+seconds separately from the count of attempts with unknown compute time.
+
+Compute telemetry cannot authenticate `actual_micros` or `receipt_id`, reduce a
+reservation, or authorize another call. The parent still obtains actual cash and
+receipt identity only from its `reconcile_verifier` and a matching `CashReceipt`.
+Absent valid cash evidence, liability remains unresolved even when compute time is
+known; an unsupported child cash claim still returns `reconciled_unknown`.
+
 Attempt events contain IDs, input hash, fixed enums, offsets/usage counters and timings
 only. Parent attributes events to current reservations and its own reconciliation
 facts, emits conservative value-free events for uncertain calls, and preserves unknown

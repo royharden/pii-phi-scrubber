@@ -28,7 +28,7 @@ from .worker_profile import WorkerProfile, validate_worker_membership
 from .worker_service import population_digest
 from .worker_timing import WarmBackendAttestor, WarmSessionMixin
 from .worker_transport import (
-    IsolatedLauncher, OwnedWorker, WorkerLaunchPolicy, WorkerProcessVerifier, launch_spec,
+    IsolatedLauncher, WorkerLaunchPolicy, WorkerProcessVerifier, launch_spec,
 )
 from .worker_wire import (
     AttemptEvent, BrokerReply, ControlCommand, InitCommand, MAX_BOOTSTRAP_BYTES, MAX_RECORD_BYTES,
@@ -223,7 +223,8 @@ class WorkerSession(WarmSessionMixin):
                     pass
             try:
                 ledger.reconcile(request.attempt_id, actual_micros=actual, state=request.state,
-                                 usage_units=request.usage_units, receipt_id=receipt_id)
+                                 usage_units=request.usage_units, receipt_id=receipt_id,
+                                 compute_seconds=request.compute_seconds)
             except BaseException:
                 status = "failed"
             else:

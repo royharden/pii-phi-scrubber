@@ -1,4 +1,5 @@
 __pycache__/
+.agent-work/
 *.py[cod]
 .venv/
 .pytest_cache/

@@ -1,0 +1,16 @@
+**
+!Dockerfile
+!src/
+!src/**
+!scripts/
+!scripts/_common.py
+!scripts/demo.py
+!scripts/eval.py
+!evals/
+!evals/public_eval.py
+!evals/requirements-docker.txt
+!data-development/
+!data-development/public-fictional.json
+**/*.bak-*
+**/__pycache__/**
+**/*.pyc
