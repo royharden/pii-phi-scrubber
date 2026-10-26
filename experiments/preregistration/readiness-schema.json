@@ -1,0 +1,305 @@
+{
+  "$defs": {
+    "ArmAccounting": {
+      "additionalProperties": false,
+      "properties": {
+        "arm": {
+          "enum": [
+            "regex",
+            "frontier",
+            "base",
+            "finetuned"
+          ],
+          "title": "Arm",
+          "type": "string"
+        },
+        "corpus_N": {
+          "minimum": 0,
+          "title": "Corpus N",
+          "type": "integer"
+        },
+        "attempted_N": {
+          "minimum": 0,
+          "title": "Attempted N",
+          "type": "integer"
+        },
+        "answered_N": {
+          "minimum": 0,
+          "title": "Answered N",
+          "type": "integer"
+        },
+        "error_N": {
+          "minimum": 0,
+          "title": "Error N",
+          "type": "integer"
+        },
+        "unattempted_N": {
+          "minimum": 0,
+          "title": "Unattempted N",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "arm",
+        "corpus_N",
+        "attempted_N",
+        "answered_N",
+        "error_N",
+        "unattempted_N"
+      ],
+      "title": "ArmAccounting",
+      "type": "object"
+    },
+    "ReadinessCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "enum": [
+            "artifacts",
+            "training",
+            "providers",
+            "training_plan",
+            "preregistration",
+            "campaign_binding",
+            "intended_population",
+            "costs",
+            "H1",
+            "H2",
+            "H3",
+            "H4",
+            "H5",
+            "H6"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "missing",
+            "held",
+            "mock",
+            "shape_valid",
+            "invalid",
+            "unknown"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "input_missing",
+            "input_invalid",
+            "shape_only_not_authenticated",
+            "mock_not_execution",
+            "held_by_roy",
+            "unknown_or_unreconciled"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "evidence_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Sha256"
+        }
+      },
+      "required": [
+        "name",
+        "state",
+        "reason"
+      ],
+      "title": "ReadinessCheck",
+      "type": "object"
+    },
+    "ReadinessCost": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "default": "unknown",
+          "enum": [
+            "unknown",
+            "known",
+            "partially_known",
+            "not_measured"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "provider_cash_total_micros": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Cash Total Micros"
+        },
+        "unresolved_liability_micros": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unresolved Liability Micros"
+        },
+        "economic_total_micros": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Economic Total Micros"
+        },
+        "scope_complete": {
+          "default": false,
+          "title": "Scope Complete",
+          "type": "boolean"
+        }
+      },
+      "title": "ReadinessCost",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Current offline preparation can never certify actual scientific readiness.",
+  "properties": {
+    "schema_version": {
+      "const": "ExperimentReadiness/v1",
+      "default": "ExperimentReadiness/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "const": "NOT_READY",
+      "default": "NOT_READY",
+      "title": "Status",
+      "type": "string"
+    },
+    "evidence_kind": {
+      "default": "readiness",
+      "enum": [
+        "readiness",
+        "mock"
+      ],
+      "title": "Evidence Kind",
+      "type": "string"
+    },
+    "actual_model_execution": {
+      "const": false,
+      "default": false,
+      "title": "Actual Model Execution",
+      "type": "boolean"
+    },
+    "execution_allowed": {
+      "const": false,
+      "default": false,
+      "title": "Execution Allowed",
+      "type": "boolean"
+    },
+    "product_acceptance": {
+      "const": false,
+      "default": false,
+      "title": "Product Acceptance",
+      "type": "boolean"
+    },
+    "held_decisions": {
+      "default": [
+        "H1",
+        "H2",
+        "H3",
+        "H4",
+        "H5",
+        "H6"
+      ],
+      "items": {
+        "enum": [
+          "H1",
+          "H2",
+          "H3",
+          "H4",
+          "H5",
+          "H6"
+        ],
+        "type": "string"
+      },
+      "title": "Held Decisions",
+      "type": "array"
+    },
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/ReadinessCheck"
+      },
+      "title": "Checks",
+      "type": "array"
+    },
+    "blockers": {
+      "items": {
+        "enum": [
+          "artifacts",
+          "training",
+          "providers",
+          "training_plan",
+          "preregistration",
+          "campaign_binding",
+          "intended_population",
+          "costs",
+          "H1",
+          "H2",
+          "H3",
+          "H4",
+          "H5",
+          "H6"
+        ],
+        "type": "string"
+      },
+      "title": "Blockers",
+      "type": "array"
+    },
+    "accounting": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ArmAccounting"
+      },
+      "title": "Accounting",
+      "type": "array"
+    },
+    "cost": {
+      "$ref": "#/$defs/ReadinessCost",
+      "default": {
+        "status": "unknown",
+        "provider_cash_total_micros": null,
+        "unresolved_liability_micros": null,
+        "economic_total_micros": null,
+        "scope_complete": false
+      }
+    }
+  },
+  "required": [
+    "checks",
+    "blockers"
+  ],
+  "title": "ExperimentReadiness",
+  "type": "object"
+}

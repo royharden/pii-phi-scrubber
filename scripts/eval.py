@@ -156,6 +156,8 @@ def execute_locked(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--readiness', action='store_true',
+                        help='read-only missing/held scientific prerequisites; never executes')
     parser.add_argument("--edition", choices=("development",))
     parser.add_argument("--validate-lock", type=Path,
                         help="inspect a future lock only; never opens its edition")
@@ -186,8 +188,15 @@ def main():
     parser.add_argument("--arms", choices=("regex", "none"), default="none")
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
-    if sum((bool(args.validate_lock), args.execute_locked, bool(args.view_result), bool(args.edition), bool(args.launch_bundle))) != 1:
+    if sum((args.readiness, bool(args.validate_lock), args.execute_locked, bool(args.view_result), bool(args.edition), bool(args.launch_bundle))) != 1:
         parser.error('choose_exactly_one_mode')
+    if args.readiness:
+        if any(value not in (None, False, 'none') for key, value in vars(args).items()
+               if key not in ('readiness', 'arms')) or args.arms != 'none':
+            parser.error('readiness_is_nonexecuting_and_takes_no_other_inputs')
+        from m7.experiment.readiness import assess_readiness
+        emit(assess_readiness().model_dump(mode='json'))
+        return 3
     if args.execute_campaign and not args.launch_bundle:
         parser.error('campaign_execution_requires_launch_bundle')
     if (args.run_timing or args.timing_plan or args.timing_resources or args.timing_out) and not args.launch_bundle:
