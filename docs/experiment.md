@@ -270,7 +270,8 @@ established. This mode accepts no execution/host/file/output arguments, imports
 no operator plugin and writes no artifact. Normal CLI behavior is unchanged.
 
 Programmatic callers use `m7.experiment.readiness.assess_readiness` with optional
-in-memory public fictional/mock inputs: `component_facts`, `training_plan`,
+in-memory public fictional/mock inputs: `component_facts`, `provider_facts`,
+`training_facts`, `training_plan`,
 `training_permit`, `edition`, `authorization`, `launch_bundle`, `result_bundle`,
 `cost_summary`, and `evidence_kind` (`readiness` or `mock`). No caller-supplied
 paths or authority callbacks are accepted. The canonical source validators are
@@ -284,6 +285,12 @@ D10 supplies `artifacts` and `training`. States are `missing`, `held`, `mock`,
 producer's value-free report digest. These are attributed facts, not authentication,
 rights or authority. Do not hash entity values or pass raw source into these facts.
 Missing producers are explicit missing checks. Duplicate components are refused.
+Prefer the producer-owned `ProviderFacts` from `m7.providers.readiness` and
+`TrainingArtifactFacts` from `m7.training.readiness` through `provider_facts` and
+`training_facts`. D11 revalidates those canonical models and projects only their
+fixed observation states and report commitments. It never calls producer artifact
+inspection. Invalid/unavailable producer schemas become fixed invalid checks;
+observations cannot replace held acquisition, training or execution authority.
 
 Consumers parse with `ExperimentReadiness.model_validate_json`. The closed wire
 contains fixed status `NOT_READY`, `actual_model_execution=false`,
