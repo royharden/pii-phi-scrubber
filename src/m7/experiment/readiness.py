@@ -142,7 +142,9 @@ def assess_readiness(*, component_facts: tuple[ComponentFact, ...] = (),
     Producer observations are explicitly attributed, not authenticated by this API.
     Even complete structural inputs retain H1-H6 and cannot cause execution.
     """
-    facts = tuple(ComponentFact.model_validate_json(row.model_dump_json()) for row in component_facts)
+    # All fields are scalar: revalidate detached fields without serializing rejected values.
+    facts = tuple(ComponentFact.model_validate(row.__dict__.copy() if type(row) is ComponentFact else None)
+                  for row in component_facts)
     facts += _producer_facts(provider_facts, training_facts)
     if len({row.component for row in facts}) != len(facts):
         raise ValueError('duplicate_readiness_component')
@@ -165,7 +167,7 @@ def assess_readiness(*, component_facts: tuple[ComponentFact, ...] = (),
         checks.append(_check('preregistration', 'missing'))
     else:
         try:
-            lock = LockedEdition.model_validate_json(edition.model_dump_json())
+            lock = LockedEdition.model_validate_json(edition.model_dump_json(warnings='error'))
             lock.require_current()
             checks.append(_check('preregistration', 'shape_valid', lock.sha256))
         except Exception:
@@ -176,7 +178,7 @@ def assess_readiness(*, component_facts: tuple[ComponentFact, ...] = (),
     else:
         try:
             from .campaign import validate_campaign_inputs
-            packet = EvaluationAuthorization.model_validate_json(authorization.model_dump_json())
+            packet = EvaluationAuthorization.model_validate_json(authorization.model_dump_json(warnings='error'))
             ReceiptAuthority.validate_binding(packet, lock)
             validate_campaign_inputs(launch_bundle, lock, packet)
             checks.append(_check('campaign_binding', 'shape_valid'))
@@ -228,7 +230,8 @@ def _producer_facts(provider, training) -> tuple[ComponentFact, ...]:
             from m7.providers.readiness import ProviderFacts
             if not isinstance(provider, ProviderFacts):
                 raise ValueError('canonical_provider_facts_required')
-            report = ProviderFacts.model_validate_json(provider.model_dump_json())
+            # Reject forged nested shapes before serializer diagnostics can echo them.
+            report = ProviderFacts.model_validate_json(provider.model_dump_json(warnings='error'))
             if report.actual_model_execution is not False or report.execution_allowed is not False:
                 raise ValueError('producer_cannot_grant_execution')
             states = tuple(row.status for row in report.arms)
@@ -243,7 +246,7 @@ def _producer_facts(provider, training) -> tuple[ComponentFact, ...]:
             from m7.training.readiness import TrainingArtifactFacts
             if not isinstance(training, TrainingArtifactFacts):
                 raise ValueError('canonical_training_facts_required')
-            report = TrainingArtifactFacts.model_validate_json(training.model_dump_json())
+            report = TrainingArtifactFacts.model_validate_json(training.model_dump_json(warnings='error'))
             if (report.actual_training_observed is not False or report.execution_allowed_now is not False
                     or report.m7_02_accepted is not False):
                 raise ValueError('producer_cannot_grant_training_acceptance')
