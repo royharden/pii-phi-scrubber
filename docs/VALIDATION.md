@@ -1,5 +1,20 @@
 # Local synthetic validation
 
+## W2 resumption — 2026-10-25
+
+Wave1 source and documentation were accepted locally at main `8c23fce`; the older
+candidate checkpoint below is retained as history, including its then-pending
+reviews. W2 resumes that accepted baseline and prepares readiness/acceptance
+evidence without authorizing model acquisition, actual training, frontier calls,
+sealed data or native provisioning. Formal independent acceptance remains held.
+The [W8 inventory](acceptance/README.md) names the missing prerequisites.
+
+D8 reran only the bounded keyless fictional demo twice for this new walkthrough.
+Both runs exited zero, reported eight records and one suppression card, and
+produced identical HTML bytes; see [demo](demo.md) for the command and digest.
+This is repeatability evidence, not a second full-suite claim, actual-model result
+or human timed rehearsal. No held operation was attempted.
+
 ## R03 candidate checkpoint — 2026-10-25
 
 PB-M7-R03 is in normal mode. INT observed the following on its combined candidate

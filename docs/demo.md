@@ -4,7 +4,8 @@ R03 public development controls have exercised the keyless CLI journey and gener
 development HTML through the demo/eval entrypoints. The combined candidate also
 passed local gate, suppression and report tests; see [validation](VALIDATION.md).
 This is a synthetic development journey, not a measured four-arm experiment or a
-timed two-minute rehearsal. Final main integration remains an INT decision.
+timed two-minute rehearsal. Wave1 was accepted into local `main` at `8c23fce`;
+that acceptance covers local synthetic validation, not full M7 product acceptance.
 
 The development path runs only the public fictional fixture. Its eight examples are
 one development block. Regex is a deterministic baseline; frontier/base/fine remain
@@ -23,6 +24,32 @@ python scripts/demo.py --offline --approved-report path/to/approved/index.html `
 The output filename must be new. Missing/mismatched hashes fail closed. This replay
 command requires an independently approved report and its actual recorded hash;
 R03 public development output does not supply a measured four-arm experiment.
+
+## Runnable W2 fictional walkthrough
+
+From the product checkout with the documented local environment, use a new output
+filename for every run (the `report/` directory already exists):
+
+```powershell
+.\.venv\Scripts\python.exe scripts/demo.py --offline --out report/development-walkthrough-01.html
+.\.venv\Scripts\python.exe scripts/demo.py --offline --out report/development-walkthrough-02.html
+Get-FileHash report/development-walkthrough-01.html, report/development-walkthrough-02.html -Algorithm SHA256
+```
+
+Two D8 W2 runs at baseline `8c23fce` exited zero with identical HTML SHA256
+`27feabf3c3d572d69ad3ed1593c979f942b3616b721c6d83aab4d9d4f3e54588`.
+Each summary reported eight records, one suppressed card and `held_out_result=false`.
+This checks repeatable fictional output; it does not rehearse an actual-model
+four-arm experiment or measure human presentation time. The HTML can be viewed
+locally as a file; no listener, provider, model weights or credentials are needed.
+
+For the present two-minute script, explain the supported classes/single-message
+bound, inspect the regex span/coverage tables and suppressed-card example, and
+point out the three model arms' unmeasured metrics. Explain the one-block
+development uncertainty limit, unknown costs and no-deploy status. Finish with
+the [W8 inventory and H6 prerequisites](acceptance/README.md), explicitly showing
+**NOT_READY** and **NOT_MEASURED**. Never fill the absent four-arm charts with mock
+scores. The full experiment rehearsal below remains future work.
 
 Suggested rehearsal after actual safe results exist:
 
