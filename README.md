@@ -1,15 +1,40 @@
 # M7 synthetic-log redaction experiment
 
-Source is written for the assigned implementation packages. The trusted operator
-host and the real receipt, native-isolation and provider services it depends on are
-not part of this checkout, and **scientific outcomes remain unverified**. Nothing in this checkout
-establishes actual training, model inference, sealed evaluation, timing, spending,
-privacy protection or product acceptance. A negative measured result is valid.
+R03 has executed the local synthetic development journey and test-double failure
+paths. The trusted operator host and real receipt, native-isolation and provider
+services remain outside this checkout. **Scientific outcomes remain unverified**:
+local checks do not establish actual training, model inference, sealed evaluation,
+real-model timing, reconciled spending, privacy protection or product acceptance.
+A negative measured result is valid.
 
 The task is English fictional NAME, EMAIL, PHONE and ACCOUNT_ID spans in one decoded
 JSON `message`, at most 1,024 Python Unicode codepoints. The other three log fields
 are preserved. This is a bounded local experiment with CLI/static reports. It is
 not a real PHI processor, upload service or compliance product.
+
+## Observed local validation
+
+At the 2026-10-25 R03 combined-candidate checkpoint `bddbb046`, INT recorded **505 tests
+passed**, with zero failures, errors or skips, and zero Ruff findings across
+`src`, `scripts`, `tests` and `evals`. Eight public development controls passed;
+that is a count of checks, not records or real-model results. Their summary records
+`model_execution=false`, `held_out_result=false` and `product_acceptance=false`.
+The tests use fictional fixtures and injected doubles. Generated development HTML
+is not a timed two-minute demo rehearsal.
+
+Later independent reviews verified the combined Docker candidate's eight controls
+with a nonroot user, read-only filesystem, disabled networking and no published
+ports. The Windows bootstrap candidate `545ff00` passed independent Extra High
+review of clean setup, repeat setup from the checkout, OUTER-directory invocation,
+no-install checks and offline wheel build/import. POSIX marker behavior was modeled
+on Windows; native Linux/macOS execution is unverified.
+
+These are separate candidate checks, not a claim that the final combined tree has
+been accepted or merged to `main`. INT owns integration and combined acceptance;
+full M7 product acceptance remains open. See the [validation checkpoint and
+reproduction guide](docs/VALIDATION.md) for the pinned combined-test checkpoint and
+commands after integration. Its bootstrap/Docker pending notes describe that
+earlier checkpoint; the independent reviews above occurred afterward.
 
 ## Reproducible development environment
 
@@ -28,8 +53,9 @@ From the checkout, run:
 .\.venv\Scripts\ruff.exe check scripts/bootstrap.py
 ```
 
-The cross-platform equivalent is `python scripts/bootstrap.py`, followed by
+The portable Python entrypoint is `python scripts/bootstrap.py`, followed by
 `python scripts/bootstrap.py --check`; on POSIX use `.venv/bin/python` for tests.
+These POSIX commands have not been executed natively in R03.
 Bootstrap resolves its checkout from the script path, so it also works from another
 directory. It downloads Python into `.agent-work/python`, uses `.agent-work/uv-cache`
 and creates `.venv` in that checkout. It does not create a global Python shim or
@@ -50,8 +76,9 @@ pins is an explicit maintenance action requiring a new lock and validation.
 The commands below use the bootstrapped interpreter (`.venv/Scripts/python.exe` on
 Windows, `.venv/bin/python` on POSIX), rather than an unrelated system Python.
 Optional model libraries and exact versions must be approved/staged separately;
-the offline commands never install or download weights. Historical Dirty Mode
-construction did not execute them; current run evidence is recorded separately.
+the offline commands never install or download weights. R03's public controls
+execute the fictional development demo/eval CLI journey. This is local validation,
+not a held-out four-arm experiment.
 
 Public fictional development fixture, with a deliberately scored and suppressed miss:
 
@@ -136,9 +163,10 @@ The isolated campaign also has an explicit retained-worker timing continuation.
 Supply `--run-timing --timing-plan path/to/isolated-timing-plan.json
 --timing-resources path/to/timing-resource-schedule.json
 --timing-out C:/evaluator-private/new-timing-directory` on the **initial**
-`--execute-campaign` invocation above. This is source construction only; no timing
-has run. Without `--execute-campaign`, the plan is structurally validated without
-loading a host, reading held-out channels, querying native controls or launching.
+`--execute-campaign` invocation above. Real-model campaign timing has not run;
+local timing tests exercise injected doubles. Without `--execute-campaign`, the
+plan is structurally validated without loading a host, reading held-out channels,
+querying native controls or launching.
 
 The preregistered `IsolatedTimingPlan/v1` pins original record order/hashes, all
 four model/config/checkpoint pins, hardware/environment/library commitments,
@@ -252,8 +280,9 @@ provides no trust services, verifiers or credentials of its own. Its default mod
 always refuses. Without real host services, `--operator-host
 m7.host.unavailable:campaign_host` (or `scripts/train.py campaign --training-host
 m7.host.unavailable:training_host`) is designed to report `status: unavailable`,
-which is the honest blocked state of this build. Like everything else here, this
-path requires separate execution evidence.
+which is the honest unavailable state without those services. Local host tests
+exercise injected success/refusal branches; they do not qualify a real operator
+host or native isolation service.
 
 ## Tests
 
@@ -262,9 +291,10 @@ reservation ledger, the offline runner, detectors, providers, training, corpus
 custody data, the experiment journal and result projection, publication gates and
 the static report.
 Expected values are derived by hand from the plan and contracts and the derivation
-is written beside each case. These were inherited as unexecuted source from Dirty
-Mode; the R03 team now runs them in the locked environment above. A failure must
-be traced against the plan before either code or expectation changes. Reviewers
+is written beside each case. R03 executed and repaired the inherited synthetic
+suite; the combined checkpoint results above do not imply that an isolated branch
+contains every combined repair. A failure must be traced against the plan before
+either code or expectation changes. Reviewers
 own regression/evaluation tests and independent verdicts. From this directory:
 
 ```powershell
@@ -284,13 +314,14 @@ computed). None is zero.
 
 ## Still required
 
-Meaningful runtime/import/Unicode/wire/scorer/journal/budget/
-privacy/integration checks; actual platform-enforced custody and independent audit;
-licensed immutable models/data and approved resource/provider terms; actual bounded
-training, dev locks, four real arms, controlled timing and reconciled receipts;
-clean offline rehearsal and nonauthoring finished-product acceptance. No CI,
-container/deployment scaffolding, remote or publication is supplied. The locked
-development bootstrap above does not establish scientific or product acceptance.
+INT's final integration and combined-tree acceptance; actual platform-enforced
+custody and independent family/label audit; licensed immutable models/data and
+approved resource/provider terms; actual bounded training, dev locks, four real
+arms, controlled real-model timing and reconciled receipts; clean timed offline
+rehearsal and nonauthoring finished-product acceptance. Local unit/control tests
+and the isolated development Docker checks close none of these scientific gates.
+No production deployment, remote publication or clinical/privacy certification
+follows from this work.
 
 Newly authored source is MIT. Model/data/dependency rights are separate; see
 [VENDORED.md](VENDORED.md). The shell's historical name expands none of this scope.
