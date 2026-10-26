@@ -1,10 +1,46 @@
 # Local training executor source
 
-This package is construction source, not a trained model or measured result. No
-training, imports of model packages, backend calls, dataset generation or runtime
-checks were performed during construction. Runtime remains unverified. Dirty Mode
-must close and exact execution/resource/license/custody authority must exist before
-any training command is run. The templates are deliberately invalid/unapproved.
+This package is not a trained model or measured scientific result. Local synthetic
+training-contract and injected-engine failure/recovery tests execute offline; no
+actual model package, training campaign or sealed experiment is established by them.
+W2 keeps artifact acquisition and actual training on H1/H2 HOLD. Exact external
+execution/resource/license/custody authority is still required for real work.
+Templates remain deliberately invalid/unapproved.
+
+## Offline readiness facts
+
+`inspect_training_readiness(plan=None, permit=None, *, staging_root=None, base=None,
+finetuned=None, at=None)` in `m7.training.readiness` returns the closed, value-free
+`TrainingArtifactFacts/v1` model. Use `.model_dump(mode="json")` for consumers.
+It reuses `validate_training_plan`, `inspect_artifacts`, the installed-environment
+probe and canonical `LocalModelConfig`/`validate_pair` declarations. Missing or
+unapproved contracts cause no artifact inspection. An explicit absolute staging
+root is required for local inspection; no directory discovery or fallback occurs.
+
+Input/artifact/environment/parity statuses remain separate. Artifact `verified`
+means the supplied local bytes and license/custody/configuration manifest shapes
+match their pins, not that rights or independent custody have been authenticated.
+Train/dev content and split checks remain canonical executor prerequisites.
+Parity `declared_compatible` compares configuration commitments without reading
+adapter roots or proving real model behavior. Diagnostics are fixed enums and
+hashes, never paths, source values or exception bodies. All facts retain
+`evidence_kind=readiness`, `training_status=not_run`,
+`actual_training_observed=false`, `execution_allowed_now=false` and
+`m7_02_accepted=false`. D11 owns the single composed experiment readiness decision.
+
+`audit/permits/H1-H2-offline-decision-packet.json` lists the exact missing decisions
+from existing local context. Current rights, immutable revisions, sizes, model
+library versions and CPU/disk feasibility remain unknown; no external metadata
+query or download was performed to fill them.
+
+Injected training engines or environment checks are classified as `mock` in the
+run header and `TrainingReceipt/v2.execution_kind`; the run exposes
+`evidence_kind=mock`. Outcome validation and stopped-worker recovery can account
+these structurally valid mock outcomes and preserve liabilities. Recovery retains
+that kind, or `readiness` for old headers without a kind. The actual completed
+receipt reader, checkpoint selection and export reject mock evidence. No injection
+can produce an `actual_training` claim through the executor; genuine default
+backend work remains separately gated and unexecuted in W2.
 
 `m7.training` is canonical; root `training` only re-exports it for old callers.
 `validate_training_plan(plan, permit)` validates v1 or v2 and never executes.

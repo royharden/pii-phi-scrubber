@@ -1,0 +1,126 @@
+{
+  "schema_version": "ExperimentReadiness/v1",
+  "status": "NOT_READY",
+  "evidence_kind": "readiness",
+  "actual_model_execution": false,
+  "execution_allowed": false,
+  "product_acceptance": false,
+  "held_decisions": [
+    "H1",
+    "H2",
+    "H3",
+    "H4",
+    "H5",
+    "H6"
+  ],
+  "checks": [
+    {
+      "name": "artifacts",
+      "state": "missing",
+      "reason": "input_missing",
+      "evidence_sha256": null
+    },
+    {
+      "name": "training",
+      "state": "missing",
+      "reason": "input_missing",
+      "evidence_sha256": null
+    },
+    {
+      "name": "providers",
+      "state": "missing",
+      "reason": "input_missing",
+      "evidence_sha256": null
+    },
+    {
+      "name": "training_plan",
+      "state": "missing",
+      "reason": "input_missing",
+      "evidence_sha256": null
+    },
+    {
+      "name": "preregistration",
+      "state": "missing",
+      "reason": "input_missing",
+      "evidence_sha256": null
+    },
+    {
+      "name": "campaign_binding",
+      "state": "missing",
+      "reason": "input_missing",
+      "evidence_sha256": null
+    },
+    {
+      "name": "intended_population",
+      "state": "missing",
+      "reason": "input_missing",
+      "evidence_sha256": null
+    },
+    {
+      "name": "costs",
+      "state": "unknown",
+      "reason": "unknown_or_unreconciled",
+      "evidence_sha256": null
+    },
+    {
+      "name": "H1",
+      "state": "held",
+      "reason": "held_by_roy",
+      "evidence_sha256": null
+    },
+    {
+      "name": "H2",
+      "state": "held",
+      "reason": "held_by_roy",
+      "evidence_sha256": null
+    },
+    {
+      "name": "H3",
+      "state": "held",
+      "reason": "held_by_roy",
+      "evidence_sha256": null
+    },
+    {
+      "name": "H4",
+      "state": "held",
+      "reason": "held_by_roy",
+      "evidence_sha256": null
+    },
+    {
+      "name": "H5",
+      "state": "held",
+      "reason": "held_by_roy",
+      "evidence_sha256": null
+    },
+    {
+      "name": "H6",
+      "state": "held",
+      "reason": "held_by_roy",
+      "evidence_sha256": null
+    }
+  ],
+  "blockers": [
+    "artifacts",
+    "training",
+    "providers",
+    "training_plan",
+    "preregistration",
+    "campaign_binding",
+    "intended_population",
+    "costs",
+    "H1",
+    "H2",
+    "H3",
+    "H4",
+    "H5",
+    "H6"
+  ],
+  "accounting": [],
+  "cost": {
+    "status": "unknown",
+    "provider_cash_total_micros": null,
+    "unresolved_liability_micros": null,
+    "economic_total_micros": null,
+    "scope_complete": false
+  }
+}

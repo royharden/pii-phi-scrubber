@@ -162,7 +162,8 @@ def validate_training_plan(plan: dict, permit: dict, *, at: datetime | None = No
             "reason": "validation_does_not_execute_or_approve"}
 
 
-def validate_training_receipt(receipt: dict, plan: dict, permit: dict | None = None) -> dict:
+def _validate_completed_receipt(receipt: dict, plan: dict, permit: dict | None = None,
+                                *, allow_mock: bool = False) -> dict:
     """Structural/lineage check only, never independent execution acceptance."""
     if type(receipt) is not dict or receipt.get("plan_sha256") != digest(plan):
         raise ValueError("receipt_plan_mismatch")
@@ -216,19 +217,26 @@ def validate_training_receipt(receipt: dict, plan: dict, permit: dict | None = N
                 raise ValueError("receipt_permit_mismatch")
     else:
         raise ValueError("unknown_receipt_schema")
-    if receipt.get("execution_kind") != "actual_training" or receipt.get("status") != "completed":
+    mock = allow_mock and receipt.get("schema_version") == "TrainingReceipt/v2" and receipt.get("execution_kind") == "mock"
+    if (receipt.get("execution_kind") != "actual_training" and not mock) or receipt.get("status") != "completed":
         raise ValueError("actual_training_required")
-    return {"status": "structurally_valid", "independent_audit": "pending", "m7_02_accepted": False}
+    return {"status": "structurally_valid_mock" if mock else "structurally_valid",
+            "independent_audit": "pending", "m7_02_accepted": False}
+
+
+def validate_training_receipt(receipt: dict, plan: dict, permit: dict | None = None) -> dict:
+    """Actual completed-training lineage only; mock outcomes cannot pass this gate."""
+    return _validate_completed_receipt(receipt, plan, permit)
 
 
 def validate_training_outcome(receipt: dict, plan: dict, permit: dict) -> dict:
     """Canonical outcome reader; failures are never turned into success receipts."""
     if receipt.get("status") == "completed":
-        return validate_training_receipt(receipt, plan, permit)
+        return _validate_completed_receipt(receipt, plan, permit, allow_mock=True)
     shape(receipt, RECEIPT_FIELDS)
     expected = {"failed": "engine_failure", "oom": "out_of_memory", "cancelled": "cancelled"}
     trial = next((t for t in plan["trials"] if t["trial_id"] == receipt["trial_id"]), None)
-    if (receipt["schema_version"] != "TrainingReceipt/v2" or receipt["execution_kind"] != "actual_training" or
+    if (receipt["schema_version"] != "TrainingReceipt/v2" or receipt["execution_kind"] not in ("actual_training", "mock") or
             receipt["status"] not in expected or receipt["error_code"] != expected[receipt["status"]] or
             trial is None or receipt["trial_sha256"] != digest(trial) or receipt["seed"] != trial["seed"] or
             receipt["plan_sha256"] != digest(plan) or receipt["permit_sha256"] != digest(permit) or

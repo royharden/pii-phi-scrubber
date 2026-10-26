@@ -53,6 +53,9 @@ def recover_training_run(plan: dict, permit: dict, *, root: Path,
     header_path = run_dir / "run-started.json"
     no_links(header_path)
     header = load_object(header_path)
+    evidence_kind = header.get("execution_kind", "readiness")
+    if evidence_kind not in ("actual_training", "mock", "readiness"):
+        raise ValueError("recovery_evidence_kind_invalid")
     if (authorization.edition_id != plan["edition_id"] or authorization.plan_sha256 != digest(plan) or
             authorization.permit_sha256 != digest(permit) or
             authorization.run_started_sha256 != digest(header) or
@@ -124,6 +127,8 @@ def recover_training_run(plan: dict, permit: dict, *, root: Path,
             try:
                 receipt = load_object(receipt_path)
                 validate_training_outcome(receipt, plan, permit)
+                if evidence_kind != "readiness" and receipt["execution_kind"] != evidence_kind:
+                    raise ValueError("recovery_evidence_kind_mismatch")
                 if receipt["ledger_attempt_id"] != attempt or receipt["trial_id"] != trial["trial_id"]:
                     raise ValueError("recovery_receipt_attempt_mismatch")
             except (ValueError, OSError):
@@ -172,6 +177,7 @@ def recover_training_run(plan: dict, permit: dict, *, root: Path,
     recovery_dir = recovery_parent / authorization.authorization_id
     recovery_dir.mkdir(exist_ok=False)
     report = {"schema_version": "TrainingRecoveryReceipt/v1", "edition_id": plan["edition_id"],
+        "evidence_kind": evidence_kind,
         "plan_sha256": digest(plan), "permit_sha256": digest(permit),
         "recovery_authorization_sha256": digest(authorization.model_dump(mode="json")),
         "stopped_worker_receipt_sha256": authorization.stopped_worker_receipt_sha256,

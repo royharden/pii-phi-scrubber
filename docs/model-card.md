@@ -53,3 +53,8 @@ production privacy/compliance decisions are outside scope. See LIMITATIONS.md.
 License: newly authored source MIT, copyright 2026 Roy Harden. No model/data rights are
 conveyed by that source license. Dependency/license closure and independent product
 acceptance remain pending. Negative results will remain visible if later measured.
+
+W2 acceptance preparation uses the canonical `ExperimentReadiness/v1` assessment
+and the [W8 inventory](acceptance/README.md). Its `NOT_READY` packet and any mock
+or shape-valid evidence cannot establish actual model execution or independent
+product acceptance. H1–H6 require separate decisions; no hold is released here.
