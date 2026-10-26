@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from typing import Literal
 
+from pydantic import field_validator
+
 from m7.contracts import Boundary, Digest
 from m7.providers.contracts import AdapterFault, LocalModelConfig, config_digest
 from m7.providers.parity import validate_pair
@@ -42,6 +44,14 @@ class TrainingArtifactFacts(Boundary):
     actual_training_observed: Literal[False] = False
     execution_allowed_now: Literal[False] = False
     m7_02_accepted: Literal[False] = False
+
+    @field_validator("actual_training_observed", "execution_allowed_now", "m7_02_accepted", mode="before")
+    @classmethod
+    def false_flags_are_booleans(cls, value):
+        # Literal[False] alone accepts integer zero even in strict Pydantic mode.
+        if value is not False:
+            raise ValueError("readiness_false_boolean_required")
+        return value
 
 
 def _configuration(value: LocalModelConfig | dict) -> LocalModelConfig:
