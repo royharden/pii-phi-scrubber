@@ -178,9 +178,14 @@ def assess_readiness(*, component_facts: tuple[ComponentFact, ...] = (),
     else:
         try:
             from .campaign import validate_campaign_inputs
+            from m7.training.launch_bundle import WorkerLaunchBundle
+            if not isinstance(launch_bundle, WorkerLaunchBundle):
+                raise ValueError('canonical_worker_launch_bundle_required')
+            # Detach nested caller models before downstream serializers can warn.
+            bundle = WorkerLaunchBundle.model_validate_json(launch_bundle.model_dump_json(warnings='error'))
             packet = EvaluationAuthorization.model_validate_json(authorization.model_dump_json(warnings='error'))
             ReceiptAuthority.validate_binding(packet, lock)
-            validate_campaign_inputs(launch_bundle, lock, packet)
+            validate_campaign_inputs(bundle, lock, packet)
             checks.append(_check('campaign_binding', 'shape_valid'))
         except Exception:
             checks.append(_check('campaign_binding', 'invalid'))
