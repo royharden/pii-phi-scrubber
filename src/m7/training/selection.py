@@ -141,6 +141,8 @@ def select_checkpoint(rows: Sequence[DevRecord], evaluations: Sequence[DevEvalua
     if not 1 <= len(planned) <= 3:
         raise ValueError("trial_cap_exceeded")
     for receipt in trial_receipts:
+        if receipt.get("execution_kind") != "actual_training":
+            raise ValueError("actual_training_required")
         validate_training_outcome(receipt, training_plan, training_permit)
         key = receipt["trial_id"]
         if key in receipts or key not in planned:

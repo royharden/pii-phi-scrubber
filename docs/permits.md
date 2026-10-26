@@ -1,5 +1,13 @@
 # Training permits and trust boundary
 
+W2 H1/H2 remain HOLD. The offline preparation packet is
+[`H1-H2-offline-decision-packet.json`](../audit/permits/H1-H2-offline-decision-packet.json).
+It explicitly leaves current rights, exact immutable artifacts/bytes, model-library
+pins and CPU/disk feasibility unknown. It is not an approving receipt. Public
+metadata retrieval requires an explicit decision before any external query;
+artifact acquisition and actual training require their own exact subsequent grant.
+Local readiness facts and injected-engine mock receipts grant no execution rights.
+
 No template here grants permission. Approval, licensed local artifacts, independent
 custody/audit, resource authority, actual spend cap and Dirty Mode closure are
 separate prerequisites. Hash checks prevent mismatched bytes; local JSON is not a

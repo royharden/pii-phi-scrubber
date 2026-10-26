@@ -77,6 +77,8 @@ def execute_training(plan: dict, permit: dict, *, root: Path | str,
     # Detach caller-owned mappings so later mutation cannot rewrite lineage.
     plan = json.loads(json.dumps(plan, allow_nan=False))
     permit = json.loads(json.dumps(permit, allow_nan=False))
+    # Injected engines/version probes exercise the contract, not actual-model evidence.
+    execution_kind = "mock" if engine is not None or environment_check is not None else "actual_training"
     if plan.get("schema_version") != "TrainingPlan/v2":
         raise ValueError("execution_requires_v2_plan")
     validate_training_plan(plan, permit, at=clock())
@@ -100,6 +102,7 @@ def execute_training(plan: dict, permit: dict, *, root: Path | str,
     run_dir.mkdir(exist_ok=False)
     _write_json(run_dir / "run-started.json", {
         "schema_version": "TrainingRunStarted/v2", "plan_sha256": plan_hash,
+        "execution_kind": execution_kind,
         "permit_sha256": permit_hash, "edition_id": plan["edition_id"],
         "started_at": clock().isoformat(), "trial_ids": [t["trial_id"] for t in plan["trials"]]})
     accounting = staging / "accounting"
@@ -209,7 +212,7 @@ def execute_training(plan: dict, permit: dict, *, root: Path | str,
         actual = result.actual_micros if status == "completed" else None
         billing = result.billing_receipt_id if status == "completed" else None
         receipt = {
-            "schema_version": "TrainingReceipt/v2", "execution_kind": "actual_training",
+            "schema_version": "TrainingReceipt/v2", "execution_kind": execution_kind,
             "edition_id": plan["edition_id"], "plan_sha256": plan_hash,
             "permit_sha256": permit_hash, "authorization_id": permit["authorization_id"],
             "artifact_hashes": {k: v["sha256"] for k, v in plan["artifacts"].items()},
@@ -234,6 +237,7 @@ def execute_training(plan: dict, permit: dict, *, root: Path | str,
                          state={"completed": "succeeded", "oom": "failed"}.get(status, status))
         receipts.append(receipt)
     run = {"schema_version": "TrainingRun/v2", "edition_id": plan["edition_id"],
+           "evidence_kind": execution_kind,
            "plan_sha256": plan_hash, "permit_sha256": permit_hash,
            "status": "cancelled" if cancelled else "blocked" if blocked_reason else "completed_with_outcomes",
            "blocked_reason": blocked_reason,
