@@ -15,6 +15,7 @@ from .locking import (
     selection_lock_reference, verify_pre_test_lock,
 )
 from .recovery import RecoveryAuthorization, recover_training_run
+from .readiness import TrainingArtifactFacts, inspect_training_readiness
 from .campaign_models import (
     CampaignActivationReceipt, CampaignAllocation, CampaignBudget, CampaignResources, CampaignSpec,
     SelectedArtifactManifest,
@@ -56,4 +57,4 @@ __all__ = ["EngineResult", "TrainingCancelled", "TrainingEngine", "TrainingOOM",
            "TimingResourceReceipt", "TimingResourceSchedule", "TimingResourcesHandoff",
            "build_timing_resource_schedule", "export_timing_handoff", "load_timing_handoff",
            "normalize_timing_cash_snapshot", "prepare_timing_handoff", "validate_timing_handoff",
-           "validate_timing_resources"]
+           "validate_timing_resources", "TrainingArtifactFacts", "inspect_training_readiness"]
