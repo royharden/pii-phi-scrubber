@@ -29,7 +29,8 @@ def gate_record(record: LogRecord, gold: tuple[Span, ...],
     Conservative substring checks can suppress a benign coincidental occurrence.
     Suppression must not change the upstream detection metrics.
     """
-    reject = lambda reason: PublicationDecision(False, reason)
+    def reject(reason):
+        return PublicationDecision(False, reason)
     original = record.log.message
     if (sha256(original.encode("utf-8")).hexdigest() != record.content_sha256
             or rendering.content_sha256 != record.content_sha256

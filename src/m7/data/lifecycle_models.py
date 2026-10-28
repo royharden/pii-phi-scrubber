@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, model_serializer
 
 from m7.contracts import Boundary, Digest, Identifier
 from .timing_models import TimingPhaseConsumed, TimingPhaseTerminal
@@ -41,6 +41,20 @@ class FreezeReceipt(Boundary):
     # Successors only: the predecessor inventory whose test entity values were checked
     # disjoint at freeze. A commitment to the inventory, never values or value hashes.
     entity_disjoint_from_inventory_sha256: Digest | None = None
+
+    @model_serializer(mode='wrap')
+    def preserve_legacy_wire(self, handler):
+        """Keep historical commitments stable without inventing successor proof.
+
+        Pre-R3 receipts did not contain this field. Adding a default null during
+        replay would invalidate their seal references and the journal hash chain.
+        Newly frozen receipts explicitly provide it; successors still require a
+        matching non-null predecessor commitment in lifecycle transition checks.
+        """
+        value = handler(self)
+        if 'entity_disjoint_from_inventory_sha256' not in self.model_fields_set:
+            value.pop('entity_disjoint_from_inventory_sha256', None)
+        return value
 
 
 class SealReceipt(Boundary):

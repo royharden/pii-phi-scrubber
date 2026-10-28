@@ -220,7 +220,8 @@ def _locked_details(bundle: Mapping) -> str:
                                  + '<td>' + _metric(point) + '</td>'
                                  + ''.join('<td>' + _number(v) + '</td>' for v in
                                            [point.get('numerator'), point.get('denominator'),
-                                            *(ci.get('interval') or (None, None))]) + '</tr>')
+                                            *(ci.get('interval') or (None, None))])
+                                 + '<td>' + escape(_interval_state(ci)) + '</td></tr>')
     for scope in ('total', 'normal', 'challenge'):
         values = (bundle.get('paired') or {}).get(scope) or {}
         for group in ('NAME', 'EMAIL', 'PHONE', 'ACCOUNT_ID', 'micro'):
@@ -228,11 +229,12 @@ def _locked_details(bundle: Mapping) -> str:
             for key in ('precision', 'recall', 'f1'):
                 ci = quality.get(key) or {}
                 paired_quality.append(tr((scope, group, key), [ci.get(k) for k in ('valid_draws', 'undefined_draws')]
-                                         + list(ci.get('interval') or (None, None))))
+                                         + list(ci.get('interval') or (None, None)))[:-len('</tr>')]
+                                      + '<td>' + escape(_interval_state(ci)) + '</td></tr>')
     output.append('<h2>Failure-aware harm rates by slice</h2>' + table(
-        ('Arm', 'Scope', 'Measure', 'Value', 'Numerator', 'Denominator', 'Lower95', 'Upper95'), harm_rows))
+        ('Arm', 'Scope', 'Measure', 'Value', 'Numerator', 'Denominator', 'Lower95', 'Upper95', 'Interval'), harm_rows))
     output.append('<h2>Paired class and micro differences</h2>' + table(
-        ('Scope', 'Class', 'Metric', 'Valid', 'Undefined', 'Lower95', 'Upper95'), paired_quality))
+        ('Scope', 'Class', 'Metric', 'Valid', 'Undefined', 'Lower95', 'Upper95', 'Interval'), paired_quality))
     secondary = []
     for row in rows:
         diagnostic = row.get('successful_only') or {}

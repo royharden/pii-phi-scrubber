@@ -115,6 +115,11 @@ def execute_locked(args):
         return 3
     if not isinstance(host, OperatorHost):
         raise ValueError('operator_host_contract_required')
+    if (not callable(host.verify_receipt) or host.custody_filesystem is None
+            or host.isolation_guard is None):
+        emit({'status': 'unavailable', 'reason': 'authenticated_operator_host_unavailable',
+              'product_acceptance': False})
+        return 3
     from m7.data.lifecycle import CustodyLifecycle
     from m7.data.storage import read_bundle
     from m7.training.selection_models import NumericalTargets, PreTestSelectionLock

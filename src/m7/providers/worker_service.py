@@ -13,7 +13,7 @@ from time import monotonic, perf_counter
 from uuid import uuid4
 from typing import BinaryIO
 
-from m7.contracts import LogRecord, Prediction
+from m7.contracts import Prediction
 from m7.detectors.attempts import Ledger
 from m7.ledger import BudgetExceeded
 from .worker_wire import (
@@ -80,13 +80,11 @@ class RemoteLedger:
     def reconcile(self, attempt_id: str, *, actual_micros: int | None, state: str,
                   usage_units: int | None = None, receipt_id: str | None = None,
                   compute_seconds: float | None = None) -> None:
-        # Accepted for Ledger protocol parity; ReconcileRequest has no compute field yet,
-        # so the parent ledger keeps compute time unknown (never fabricated).
-        del compute_seconds
         self.rpc_seq += 1
         reply = self._rpc(ReconcileRequest(session_id=self.bootstrap.session_id, seq=self.seq,
             rpc_seq=self.rpc_seq, attempt_id=attempt_id, arm=self.arm, actual_micros=actual_micros,
-            state=state, usage_units=usage_units, receipt_id=receipt_id))
+            state=state, usage_units=usage_units, receipt_id=receipt_id,
+            compute_seconds=compute_seconds))
         if reply.status != "ok":
             # In particular, unsupported child cash claims stay unknown in parent.
             raise ValueError("broker_reconciliation_unavailable")
