@@ -1,0 +1,126 @@
+"""Offline development orchestration. No backend loading or network activity."""
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass
+from typing import Callable, Mapping, Sequence
+
+from m7.contracts import LogRecord, Prediction, Span, validate_prediction
+from m7.eval import Observation, score
+from m7.eval.bootstrap import paired_interval, quality_intervals
+from m7.render import render
+
+ARMS = ("regex", "frontier", "base", "finetuned")
+
+
+@dataclass(frozen=True)
+class EvaluationRecord:
+    record: LogRecord
+    gold: tuple[Span, ...]
+    block_id: str
+    slice_name: str = "normal"
+
+
+def run_offline(records: Sequence[EvaluationRecord],
+                adapters: Mapping[str, Callable[[LogRecord], Prediction]], *,
+                run_id: str = "development", publication_gate: Callable | None = None) -> dict:
+    """Score fixed intended population; exceptions become value-free failures.
+
+    This development entrypoint cannot certify custody or execute a sealed edition.
+    Adapters receive only LogRecord, never gold/provenance. No automatic retries.
+    """
+    if set(adapters) - set(ARMS):
+        raise ValueError("unknown_arm")
+    ids = [r.record.record_id for r in records]
+    if len(ids) != len(set(ids)):
+        raise ValueError("duplicate_record_id")
+    for row in records:
+        if not row.block_id or row.slice_name not in ("normal", "challenge"):
+            raise ValueError("invalid_provenance")
+        if any(s.start < 0 or s.start >= s.end or s.end > len(row.record.log.message) for s in row.gold):
+            raise ValueError("invalid_gold_bounds")
+    corpus_digest = hashlib.sha256("\n".join(sorted(
+        r.record.record_id + ":" + r.record.content_sha256 for r in records)).encode()).hexdigest()
+    bundle = {"schema_version": "EvaluationBundle/v1", "evidence_kind": "development_scaffold",
+              "run_id": run_id, "corpus_N": len(records), "corpus_digest": corpus_digest,
+              "arms": [], "publication": [], "paired_fine_minus_base": None,
+              "limitations": ["Development scaffold; no held-out or training acceptance.",
+                              "Controlled timing and economic costs are not measured."]}
+    observations = {}
+    for arm in ARMS:
+        row = {"arm": arm, "measurement_status": "not_measured", "reason": "adapter_unavailable",
+               "corpus_N": len(records), "eligible_N": len(records), "attempted_N": 0,
+               "answered_N": 0, "error_N": 0, "unattempted_N": len(records),
+               "publication_suppressed_N": 0,
+               "metrics": None, "intervals": None, "successful_only": None, "slices": {}, "timing": None,
+               "diagnostics": [], "cost": {"status": "unknown", "provider_cash": None,
+                                              "economic_total": None}}
+        if arm not in adapters or not records:
+            if not records:
+                row["reason"] = "empty_corpus"
+            bundle["arms"].append(row)
+            continue
+        obs = []
+        for item in records:
+            available = structure = False
+            spans = ()
+            error = None
+            row["attempted_N"] += 1
+            rendered = None
+            try:
+                if len(item.record.log.message) > 1024:
+                    raise ValueError("unsupported_length")
+                prediction = validate_prediction(item.record, adapters[arm](item.record))
+                if prediction.arm != arm or prediction.run_id != run_id:
+                    raise ValueError("prediction_identity_mismatch")
+                available = prediction.status == "ok"
+                spans = prediction.spans if available else ()
+                error = prediction.error_code if not available else None
+            except Exception:
+                # Never stringify exceptions: provider/validation errors may contain values.
+                available = structure = False
+                spans = ()
+                error = "attempt_failed"
+            else:
+                try:
+                    rendered = render(item.record, prediction)
+                    structure = rendered.schema_valid and rendered.safe_log is not None
+                except Exception:
+                    structure = False
+                if available and not structure:
+                    error = "render_failure"
+            if publication_gate is not None and rendered is not None:
+                try:
+                    safe = publication_gate(item.record, item.gold, rendered)
+                except Exception:
+                    safe = {"approved": False, "reason": "publication_gate_failed", "safe_message": None}
+                if not isinstance(safe, dict) or safe.get("approved") is not True:
+                    row["publication_suppressed_N"] += 1
+                # Publication suppression cannot change pre-gate detector scores.
+                bundle["publication"].append({"arm": arm, "record_id": item.record.record_id,
+                                               "artifact": safe})
+            row["answered_N"] += available and structure
+            if error:
+                row["diagnostics"].append({"record_id": item.record.record_id, "error_code": error})
+            obs.append(Observation(item.record.record_id, item.block_id, item.slice_name,
+                                   len(item.record.log.message), item.gold, spans, available, structure))
+        row.update(measurement_status="measured" if row["answered_N"] == len(records) else "measured_incomplete",
+                   reason=None if row["answered_N"] == len(records) else "terminal_failures",
+                   error_N=len(records)-row["answered_N"], unattempted_N=0,
+                   metrics=score(obs), successful_only=score([r for r in obs if r.available and r.structure_valid]),
+                   slices={name: score([r for r in obs if r.slice_name == name]) for name in ("normal", "challenge")})
+        row["intervals"] = quality_intervals(obs)
+        observations[arm] = obs
+        bundle["arms"].append(row)
+    if "base" in observations and "finetuned" in observations:
+        bundle["paired_fine_minus_base"] = paired_interval(observations["finetuned"], observations["base"],
+                                                           lambda m: m["macro"]["f1"]["value"])
+        bundle["paired_fine_minus_base_slices"] = {
+            name: paired_interval([r for r in observations["finetuned"] if r.slice_name == name],
+                                  [r for r in observations["base"] if r.slice_name == name],
+                                  lambda m: m["macro"]["f1"]["value"])
+            for name in ("normal", "challenge")}
+    return bundle
+
+
+__all__ = ["EvaluationRecord", "run_offline"]
