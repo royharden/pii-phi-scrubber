@@ -260,12 +260,15 @@ def aggregate_edition(edition: LockedEdition, inference: tuple[LogRecord, ...],
                 except Exception:
                     approved = False
                 suppressed += not approved
-            counts['answered'] += available and structure
+            # Outcome frequency already includes cells labelled ``answered``.
+            # Count usable rendered records separately so successes occur once,
+            # and an answered detection with a renderer failure remains an error.
+            counts['rendered_answers'] += available and structure
             counts['render_failed'] += available and not structure
             observations.append(Observation(record.record_id, truth.block_id, truth.slice_name,
                                             len(record.log.message), truth.spans,
                                             prediction.spans if available else (), available, structure))
-        attempted, answered = counts['attempted'], counts['answered']
+        attempted, answered = counts['attempted'], counts['rendered_answers']
         measured = attempted > 0
         row = {
             'arm': arm, 'measurement_status': ('not_measured' if not measured else

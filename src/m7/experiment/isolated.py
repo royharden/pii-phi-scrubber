@@ -158,18 +158,20 @@ class _WorkerAdapter:
             status = ('cancelled' if code == 'cancelled' else 'invalid_output'
                       if code in ('invalid_output', 'truncated') else 'unavailable')
             attempt_id = 'parent-guard-' + uuid4().hex
+            duration_ms = (perf_counter() - started) * 1000
             event = AttemptEvent.model_validate({'run_id': self.edition.run_id,
                 'arm': self.pin.arm, 'model_id': self.pin.model_id,
                 'record_id': record.record_id, 'content_sha256': record.content_sha256,
                 'attempt': {'attempt_id': attempt_id, 'ordinal': 1, 'status': status,
-                    'error_code': code, 'duration_ms': (perf_counter() - started) * 1000,
+                    'error_code': code, 'duration_ms': duration_ms,
                     'input_tokens': None, 'output_tokens': None, 'reservation_micros': None,
                     'actual_micros': None, 'liability_status': 'not_reserved',
                     'retry_reason': 'cancelled_before_reserve' if code == 'cancelled' else 'preflight_rejected',
                     'physical_may_have_started': False}})
             self._guard_events = (event,)
             return failure(record, run_id=self.edition.run_id, arm=self.pin.arm,
-                           model_id=self.pin.model_id, attempt_id=attempt_id, status=status, error_code=code)
+                           model_id=self.pin.model_id, attempt_id=attempt_id, status=status, error_code=code,
+                           duration_ms=duration_ms)
         return self.session.predict(record)
 
     def metadata(self) -> tuple[object, ...]:

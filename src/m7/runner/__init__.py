@@ -8,6 +8,7 @@ from typing import Callable, Mapping, Sequence
 from m7.contracts import LogRecord, Prediction, Span, validate_prediction
 from m7.eval import Observation, score
 from m7.eval.bootstrap import paired_interval, quality_intervals
+from m7.experiment import AdapterBinding, EditionJournal, LockedEdition, execute_edition
 from m7.render import render
 
 ARMS = ("regex", "frontier", "base", "finetuned")
@@ -125,7 +126,5 @@ def run_offline(records: Sequence[EvaluationRecord],
 
 # Locked execution is separate from the public development entrypoint. It requires
 # a current receipt verifier, a sealed corpus and an explicit journal writer.
-from m7.experiment import AdapterBinding, EditionJournal, LockedEdition, execute_edition
-
 __all__ = ["EvaluationRecord", "run_offline", "AdapterBinding", "EditionJournal",
            "LockedEdition", "execute_edition"]
