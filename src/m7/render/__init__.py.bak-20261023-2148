@@ -1,0 +1,30 @@
+"""Deterministic union rendering; unsuppressed text must stay in memory."""
+from m7.contracts import LogFields, LogRecord, Prediction, RenderResult, ReplacementInterval, Span, validate_prediction
+
+
+def render(record: LogRecord, prediction: Prediction) -> RenderResult:
+    prediction = validate_prediction(record, prediction)
+    if prediction.status != 'ok':
+        return RenderResult(record_id=record.record_id, content_sha256=record.content_sha256, schema_valid=False, error_code='invalid_prediction')
+    groups: list[list[tuple[int, Span]]] = []
+    for i, span in enumerate(prediction.spans):
+        if groups and span.start < max(s.end for _, s in groups[-1]):
+            groups[-1].append((i, span))
+        else:
+            groups.append([(i, span)])
+    intervals = []
+    for ordinal, group in enumerate(groups, 1):
+        spans = [s for _, s in group]
+        labels = {s.label for s in spans}
+        label = next(iter(labels)) if len(labels) == 1 else 'REDACTED'
+        intervals.append(ReplacementInterval(start=min(s.start for s in spans), end=max(s.end for s in spans), placeholder=f'[{label}_{ordinal}]', candidate_ids=tuple(i for i, _ in group), cross_label=len(labels) > 1, same_label=len(spans) > 1 and len(labels) == 1, nested=any(a != b and a.start <= b.start and b.end <= a.end for a in spans for b in spans)))
+    message = record.log.message
+    for interval in reversed(intervals):
+        message = message[:interval.start] + interval.placeholder + message[interval.end:]
+    # Rendered placeholders can lengthen a valid message beyond the inference bound.
+    # The bound applies to detector input; reject expansion rather than bypass schema.
+    try:
+        safe_log = LogFields(timestamp=record.log.timestamp, level=record.log.level, event=record.log.event, message=message)
+    except ValueError:
+        return RenderResult(record_id=record.record_id, content_sha256=record.content_sha256, schema_valid=False, error_code='invalid_structure')
+    return RenderResult(record_id=record.record_id, content_sha256=record.content_sha256, safe_log=safe_log, intervals=tuple(intervals), schema_valid=True)

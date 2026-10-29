@@ -1,0 +1,30 @@
+"""CLI support: fixed error enums, no raw exception/validation disclosure."""
+
+import json
+from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(1, str(ROOT))
+
+
+def load_json(path: Path) -> dict:
+    if path.stat().st_size > 2_000_000:
+        raise ValueError("input_too_large")
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError("object_required")
+    return value
+
+
+def emit(value: dict) -> None:
+    print(json.dumps(value, allow_nan=False, sort_keys=True))
+
+
+def guarded(main) -> None:
+    try:
+        raise SystemExit(main())
+    except (OSError, ValueError, TypeError, KeyError, ImportError):
+        emit({"status": "error", "reason": "invalid_or_unavailable_input"})
+        raise SystemExit(2) from None

@@ -1,0 +1,81 @@
+# Locked-edition evaluator
+
+Source construction only; this flow has not run. No sealed dataset, approved lock,
+training receipt, model/provider execution or scientific result is supplied here.
+
+`m7.experiment.execute_edition` is the future authorized host API. It takes a
+`LockedEdition`, standalone inference records, a separate tuple of `CustodyGold`,
+an arm-to-`AdapterBinding` mapping, an `EditionJournal`, and a mandatory authority
+callback. All four ordered arm pins and the entire sorted record/hash population
+are fixed in the lock. `check_channels` rejects missing/duplicate IDs, differing
+input hashes, invalid gold bounds or a mismatched inference split before any call.
+
+`channels_from_bundle` verifies D4's `CorpusBundle`, pins its complete manifest,
+selects only test provenance, then creates separate message and evaluator gold
+channels. It requires at least 20 declared test blocks; it cannot independently
+certify semantic ancestry. The authority gate must authenticate the separate audit.
+Only `LogRecord` reaches an adapter. Family, slice, gold and the containing bundle
+never appear in the adapter signature. An in-process callback is a logical
+boundary: the deployment custodian must supply actual process/file separation.
+
+The trusted host supplies `ReceiptAuthority` with a real receipt verifier for the
+evaluation authorization, custody release, independent audit and pre-test D5
+selection lock. Packet shape and a digest alone are not authentication. Revocation
+and expiry are checked before open and every new logical call. There is no default
+approval or sample approved packet. Fine/base configuration and actual artifact
+lineage must be checked by that host and by D6's adapter bindings.
+
+An `AdapterBinding` pins the arm/model/artifact/configuration and wraps D6's
+`(LogRecord) -> Prediction`. Its mandatory preflight checks the full population
+against tokenizer/context limits before the journal is opened. A corpus
+incompatibility aborts all arms; no per-arm shortening is allowed. The D6 controller
+owns at most one transient transport retry and the reservation/attempt accounting.
+The evaluator does not retry a malformed response or repeat the logical call.
+
+## Seal, open, resume
+
+Private journal storage contains `edition.json`, `events.jsonl` and an exclusively
+created `writer.lock`. The canonical edition seal is immutable. Events are sequenced,
+hash chained, flushed and fsynced. A torn or changed event fails closed. These hashes
+detect integrity errors; they are not signatures against a hostile filesystem owner.
+An abandoned writer lock requires an operator to verify the prior owner has stopped
+before removing it. There is no timer/lease-based takeover.
+
+The first event opens the edition once. Each logical arm/record call gets a durable
+`begin` before execution and one terminal prediction afterward. On resume, a begin
+without a terminal becomes `interrupted_unknown`; it is never reissued. Provider
+billing can therefore stay unresolved without invisible duplicate inference.
+Cancellation preserves completed/failed cells and leaves never-begun cells pending.
+They may resume only under the same lock and current authority. Missing adapters
+and budget rejection become explicit terminal outcomes; adding an adapter later
+does not replace those outcomes or change this edition. A full rerun needs a newly
+authorized edition, with its scientific limitations recorded.
+
+Only when every intended cell has a terminal does the journal close. Replaying a
+closed edition recomputes aggregates without any adapter call. Hash pins, current
+authorization and the original custody channels are still required. A closed edition
+may be incomplete scientifically (for example one wholly unavailable arm).
+
+Every arm shares the exact intended population digest. `attempted_N + unattempted_N`
+equals corpus size; `answered_N + error_N` equals attempted count. Budget-rejected,
+unavailable, pending, cancelled and interrupted counts remain visible. An arm with
+no attempts has null metrics, rather than an invented zero-quality measurement.
+For a partially measured arm, every intended record enters unconditional scoring;
+missing output is an empty prediction and all sensitive characters remain exposed.
+Successful-only metrics are explicitly secondary.
+
+Journal predictions contain IDs, hashes, offsets, labels and bounded enums, never
+raw text/gold/prompts/completions/provider exceptions. Keep the journal private:
+held-out span tables are not public artifacts. Aggregate output omits even prediction
+spans, provenance IDs and rendered held-out messages. Render/gold-mask gate failures
+are counted before suppression; gate suppression never repairs detection quality.
+`write_aggregate_result` applies a closed numeric/enum field projection, verifies
+the identical four-arm counts and writes a new JSON file exclusively. Arbitrary
+bundle keys, diagnostics, prediction tables and strings cannot become public JSON.
+Full timing, paired uncertainty, adoption and CLI integration are the following
+reporting package, not evidence of execution of this source.
+
+For a shape-only future check: `python scripts/eval.py --validate-lock <lock.json>`.
+This does not authenticate, seal, open or execute the edition. Programmatic execution
+must be activated only after Dirty Mode closes and actual custody/license/resource
+and environment gates have been satisfied.

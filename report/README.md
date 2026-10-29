@@ -16,3 +16,9 @@ Cell wording: `N/A (n/d)` (zero denominator; macro counts defined classes),
 status), `not measured` (no value available: never run, not reconciled or not computed).
 The reviewed R03 source adds Interval-state cells to the harm-rate and paired
 class/micro tables; these use fixed wording rather than arbitrary diagnostic text.
+
+W2 adds a separate [W8 preparation packet](../docs/acceptance/README.md) consuming
+the canonical `ExperimentReadiness/v1` assessment. It displays `NOT_READY`, held
+decisions and missing/shape-only/mock facts; actual scientific arms remain
+`NOT_MEASURED`. It never substitutes mock scores for a measured four-arm report,
+grants execution, or issues independent product acceptance.

@@ -1,0 +1,199 @@
+"""Future local append-only journal. This module does nothing on import.
+
+Use private storage with one writer. A crash after begin is an unknown attempt,
+never permission to call the adapter again. No source text, gold, or exceptions.
+"""
+from __future__ import annotations
+
+import json
+import os
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Iterator, Literal
+
+from m7.contracts import Arm, Boundary, Digest, Identifier, Prediction
+
+from .models import ARMS, LockedEdition, canonical, commitment
+
+Outcome = Literal['answered', 'invalid_output', 'backend_failure', 'cancelled',
+                  'interrupted_unknown', 'budget_rejected', 'adapter_unavailable']
+
+
+class CellResult(Boundary):
+    arm: Arm
+    record_id: Identifier
+    content_sha256: Digest
+    attempted: bool
+    outcome: Outcome
+    prediction: Prediction | None = None
+
+
+class JournalError(ValueError):
+    pass
+
+
+class EditionJournal:
+    """Exclusive immutable seal plus hash-chained begin/terminal/closed events.
+
+    The writer lock fails closed if abandoned; a future operator may clear it only
+    after independently confirming the former owner is stopped. It is not a lease.
+    Integrity hashes detect corruption, not a malicious filesystem administrator.
+    """
+    def __init__(self, directory: str | Path):
+        self.directory = Path(directory)
+        self._locked = False
+        self._events: list[dict] = []
+        self._edition: LockedEdition | None = None
+
+    @contextmanager
+    def writer(self) -> Iterator[EditionJournal]:
+        if self._locked:
+            raise JournalError('journal_already_locked')
+        self.directory.mkdir(parents=True, exist_ok=True)
+        lock = self.directory / 'writer.lock'
+        # Exclusive creation, no stale-owner takeover and no database required.
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        try:
+            os.write(fd, str(os.getpid()).encode('ascii'))
+            os.fsync(fd)
+            self._locked = True
+            yield self
+        finally:
+            self._locked = False
+            os.close(fd)
+            # Only the lock exclusively created by this context is removed.
+            lock.unlink()
+
+    def seal(self, edition: LockedEdition) -> None:
+        self._require_writer()
+        path = self.directory / 'edition.json'
+        data = canonical(edition.model_dump(mode='json'))
+        try:
+            with path.open('xb') as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+        except FileExistsError:
+            if path.read_bytes() != data:
+                raise JournalError('edition_seal_conflict') from None
+        self._edition = edition
+        self._events = self._read_events()
+
+    def _require_writer(self) -> None:
+        if not self._locked:
+            raise JournalError('journal_writer_required')
+
+    def _read_events(self) -> list[dict]:
+        path = self.directory / 'events.jsonl'
+        if not path.exists():
+            return []
+        if path.stat().st_size > 256_000_000:
+            raise JournalError('journal_size_limit')
+        events: list[dict] = []
+        previous = self._edition.sha256 if self._edition else ''
+        with path.open('rb') as handle:
+            for line in handle:
+                # Torn writes fail closed; never discard a possibly billed begin.
+                if not line.endswith(b'\n') or len(line) > 100_000:
+                    raise JournalError('journal_torn_or_oversize_event')
+                row = json.loads(line)
+                if not isinstance(row, dict) or set(row) != {'sequence', 'previous', 'event', 'sha256'}:
+                    raise JournalError('journal_event_invalid')
+                digest = row.pop('sha256')
+                if (type(row.get('sequence')) is not int or row['sequence'] != len(events)
+                        or row.get('previous') != previous):
+                    raise JournalError('journal_lineage_mismatch')
+                if commitment(row) != digest:
+                    raise JournalError('journal_digest_mismatch')
+                row['sha256'] = digest
+                events.append(row)
+                previous = digest
+        self._validate_events(events)
+        return events
+
+    def _validate_events(self, events: list[dict]) -> None:
+        if self._edition is None:
+            raise JournalError('edition_not_sealed')
+        members = {row.record_id: row.content_sha256 for row in self._edition.population}
+        begun, done = set(), set()
+        opened = closed = False
+        for row in events:
+            event = row['event']
+            if not isinstance(event, dict) or closed:
+                raise JournalError('journal_state_invalid')
+            kind = event.get('kind')
+            if kind == 'opened' and set(event) == {'kind'} and not opened:
+                opened = True
+            elif kind == 'begin' and set(event) == {'kind', 'arm', 'record_id'} and opened:
+                key = (event['arm'], event['record_id'])
+                if key[0] not in ARMS or key[1] not in members or key in begun or key in done:
+                    raise JournalError('duplicate_or_unknown_attempt')
+                begun.add(key)
+            elif kind == 'terminal' and set(event) == {'kind', 'result'} and opened:
+                cell = CellResult.model_validate_json(canonical(event['result']))
+                key = (cell.arm, cell.record_id)
+                if key in done or members.get(cell.record_id) != cell.content_sha256:
+                    raise JournalError('terminal_identity_mismatch')
+                if cell.attempted and key not in begun:
+                    raise JournalError('attempt_without_begin')
+                if cell.attempted != (cell.outcome not in ('budget_rejected', 'adapter_unavailable')):
+                    raise JournalError('outcome_attempt_mismatch')
+                if not cell.attempted and key in begun and cell.outcome not in ('budget_rejected',):
+                    raise JournalError('inconsistent_attempt_state')
+                if cell.outcome == 'answered' and (not cell.prediction or cell.prediction.status != 'ok'):
+                    raise JournalError('answer_prediction_required')
+                if not cell.attempted and cell.prediction is not None:
+                    raise JournalError('unattempted_prediction_forbidden')
+                if cell.prediction is not None and (cell.prediction.status == 'ok') != (cell.outcome == 'answered'):
+                    raise JournalError('prediction_outcome_mismatch')
+                if cell.prediction is not None:
+                    prediction = cell.prediction
+                    pin = next(p for p in self._edition.arm_pins if p.arm == cell.arm)
+                    if (prediction.arm != cell.arm or prediction.record_id != cell.record_id
+                            or prediction.content_sha256 != cell.content_sha256
+                            or prediction.run_id != self._edition.run_id or prediction.model_id != pin.model_id):
+                        raise JournalError('prediction_pin_mismatch')
+                done.add(key)
+            elif kind == 'closed' and set(event) == {'kind'} and opened:
+                if len(done) != len(members) * len(ARMS):
+                    raise JournalError('cannot_close_incomplete_edition')
+                closed = True
+            else:
+                raise JournalError('journal_transition_invalid')
+
+    def append(self, event: dict) -> None:
+        self._require_writer()
+        if self._edition is None:
+            raise JournalError('edition_not_sealed')
+        row = {'sequence': len(self._events),
+               'previous': self._events[-1]['sha256'] if self._events else self._edition.sha256,
+               'event': event}
+        row['sha256'] = commitment(row)
+        self._validate_events([*self._events, row])
+        with (self.directory / 'events.jsonl').open('ab') as handle:
+            handle.write(canonical(row) + b'\n')
+            handle.flush()
+            os.fsync(handle.fileno())
+        self._events.append(row)
+
+    @property
+    def opened(self) -> bool:
+        return bool(self._events)
+
+    @property
+    def closed(self) -> bool:
+        return bool(self._events and self._events[-1]['event']['kind'] == 'closed')
+
+    def terminals(self) -> dict[tuple[str, str], CellResult]:
+        return {(cell.arm, cell.record_id): cell for row in self._events
+                if row['event']['kind'] == 'terminal'
+                for cell in [CellResult.model_validate_json(canonical(row['event']['result']))]}
+
+    def abandoned(self) -> tuple[tuple[str, str], ...]:
+        done = self.terminals()
+        return tuple((row['event']['arm'], row['event']['record_id']) for row in self._events
+                     if row['event']['kind'] == 'begin'
+                     and (row['event']['arm'], row['event']['record_id']) not in done)
+
+
+__all__ = ['CellResult', 'EditionJournal', 'JournalError']

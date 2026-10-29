@@ -1,0 +1,116 @@
+"""Fail-closed projection for aggregate JSON; never serialize an arbitrary bundle."""
+from __future__ import annotations
+
+import json
+import math
+import re
+from pathlib import Path
+
+from .models import ARMS
+
+_COUNTS = ('corpus_N', 'eligible_N', 'attempted_N', 'answered_N', 'error_N', 'unattempted_N',
+           'pending_N', 'budget_rejected_N', 'adapter_unavailable_N', 'interrupted_unknown_N',
+           'cancelled_N', 'render_failed_N', 'publication_suppressed_N')
+_QUALITY = ('tp', 'fp', 'fn', 'support', 'predicted_count', 'precision', 'recall', 'f1')
+_HARMS = ('residual_sensitive_codepoints', 'records_with_residual', 'benign_codepoints_redacted',
+          'benign_record_overredaction', 'unavailable', 'unsafe_or_unavailable', 'structure_failures')
+_NULL_REASONS = {'zero_denominator', 'undefined_class'}
+
+
+def _numeric(value):
+    if value is None:
+        return None
+    if type(value) not in (int, float) or not math.isfinite(value):
+        raise ValueError('non_numeric_aggregate')
+    return value
+
+
+def _ratio(value):
+    if not isinstance(value, dict):
+        return None
+    result = {key: _numeric(value.get(key)) for key in
+              ('value', 'numerator', 'denominator', 'defined_classes', 'class_count') if key in value}
+    reason = value.get('null_reason')
+    if reason is not None and reason not in _NULL_REASONS:
+        raise ValueError('unknown_metric_null_reason')
+    result['null_reason'] = reason
+    return result
+
+
+def _quality(value):
+    value = value if isinstance(value, dict) else {}
+    return {key: _ratio(value[key]) if isinstance(value.get(key), dict)
+            else _numeric(value.get(key)) for key in _QUALITY}
+
+
+def _metrics(value):
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError('invalid_metric_shape')
+    per_class = value.get('per_class', {})
+    result = {'per_class': {label: _quality(per_class.get(label)) for label in
+                            ('NAME', 'EMAIL', 'PHONE', 'ACCOUNT_ID')},
+              'micro': _quality(value.get('micro')), 'macro': _quality(value.get('macro'))}
+    for key in _HARMS:
+        result[key] = _ratio(value[key]) if isinstance(value.get(key), dict) else _numeric(value.get(key))
+    return result
+
+
+def public_aggregate(bundle: dict) -> dict:
+    """Closed field projection. Source-bearing keys/strings are not copied."""
+    if bundle.get('schema_version') != 'EvaluationBundle/v2':
+        raise ValueError('locked_result_schema_required')
+    output = {'schema_version': 'EvaluationBundle/v2', 'evidence_kind': 'locked_edition_execution',
+              'product_acceptance': False, 'publication': [], 'timing': None,
+              'paired_fine_minus_base': None}
+    for key in ('edition_sha256', 'corpus_digest'):
+        digest = bundle.get(key)
+        if not isinstance(digest, str) or re.fullmatch('[0-9a-f]{64}', digest) is None:
+            raise ValueError('invalid_result_commitment')
+        output[key] = digest
+    if bundle.get('edition_state') not in ('closed', 'open_incomplete'):
+        raise ValueError('invalid_edition_state')
+    output['edition_state'] = bundle['edition_state']
+    output['corpus_N'] = _numeric(bundle.get('corpus_N'))
+    cost = bundle.get('cost')
+    output['cost'] = ({key: _numeric(cost.get(key)) for key in
+                       ('cap_micros', 'known_provider_cash_micros', 'unresolved_liability_micros',
+                        'unknown_attempts', 'remaining_micros')} if isinstance(cost, dict) else None)
+    supplied = bundle.get('arms')
+    if not isinstance(supplied, list) or tuple(row.get('arm') for row in supplied) != ARMS:
+        raise ValueError('all_four_result_arms_required')
+    rows = []
+    for item in supplied:
+        if item.get('measurement_status') not in ('measured', 'measured_incomplete', 'not_measured'):
+            raise ValueError('invalid_measurement_status')
+        reason = item.get('reason')
+        if reason not in (None, 'no_attempts', 'incomplete_population'):
+            raise ValueError('invalid_measurement_reason')
+        row = {key: _numeric(item.get(key)) for key in _COUNTS}
+        row.update(arm=item['arm'], measurement_status=item['measurement_status'], reason=reason,
+                   metrics=_metrics(item.get('metrics')), successful_only=_metrics(item.get('successful_only')),
+                   intervals=None, timing=None,
+                   cost={'status': 'unknown', 'provider_cash': None, 'economic_total': None})
+        slices = item.get('slices', {})
+        row['slices'] = {name: _metrics(slices.get(name)) for name in ('normal', 'challenge')}
+        if (row['corpus_N'] != output['corpus_N']
+                or any(type(row[k]) is not int or row[k] < 0 for k in _COUNTS)
+                or row['attempted_N'] + row['unattempted_N'] != row['corpus_N']
+                or row['answered_N'] + row['error_N'] != row['attempted_N']):
+            raise ValueError('result_denominator_mismatch')
+        if row['measurement_status'] == 'not_measured' and row['metrics'] is not None:
+            raise ValueError('unrun_metric_forbidden')
+        rows.append(row)
+    output['arms'] = rows
+    return output
+
+
+def write_aggregate_result(bundle: dict, destination: str | Path) -> None:
+    projected = public_aggregate(bundle)
+    with Path(destination).open('x', encoding='utf-8') as handle:
+        json.dump(projected, handle, allow_nan=False, sort_keys=True, separators=(',', ':'))
+        handle.write('\n')
+
+
+__all__ = ['public_aggregate', 'write_aggregate_result']

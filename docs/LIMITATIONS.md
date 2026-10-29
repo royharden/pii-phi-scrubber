@@ -47,3 +47,8 @@ require authorized investigation. Timing interruptions remain incomplete rather 
 silently rerunning passes. Cold initialization excludes unverified process/OS cache
 effects; network frontier figures cannot establish provider-server startup latency.
 Offline replay is restricted to byte-identical approved reports and never reopens gold.
+
+W2 prepares [acceptance prerequisites](acceptance/README.md), not a final verdict.
+Its readiness packet cannot authorize execution, release acquisition/training/
+frontier/custody/native holds or certify privacy. The current team has seen
+development failures and cannot self-certify a fresh blind sealed test set.

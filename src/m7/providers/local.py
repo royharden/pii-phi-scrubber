@@ -194,13 +194,22 @@ class PermittedLocalBackend:
             backend = self._ensure_loaded()
             for record in records:
                 self.check()
-                backend.preflight(record.log.message)
+                self._preflight(backend, record)
             self.check()
+
+    def _preflight(self, backend: LocalBackend, record: LogRecord) -> None:
+        count = backend.preflight(record.log.message)
+        # Injected loaders obey the same count contract as the pinned loader.
+        # Do not coerce bools/strings or accept an unsupported input silently.
+        if type(count) is not int or count < 0:
+            raise AdapterFault("invalid_output")
+        if count > self.config.max_input_tokens:
+            raise AdapterFault("truncated")
 
     def __call__(self, record: LogRecord) -> TokenSpan:
         with self._lock:
             backend = self._ensure_loaded()
-            backend.preflight(record.log.message)
+            self._preflight(backend, record)
             self.check()  # Loading/preflight may consume the remaining permit time.
             self._physical_calls += 1
             result = backend.predict(record)

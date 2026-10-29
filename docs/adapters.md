@@ -1,5 +1,25 @@
 # Pinned inference source, runtime unverified
 
+## Offline declaration facts
+
+`m7.providers.readiness.assess_provider_facts(configs=None, permits=None,
+policies=None, *, run_id)` returns strict `ProviderFacts/v1` for the ordered base,
+finetuned and frontier arms. Each arm is `missing`, `invalid` or `shape_valid`;
+only structurally valid declarations expose config/artifact commitments. Reasons
+are fixed enums. The function reuses `ExecutionPermit.check`, `config_digest`,
+`validate_pair` and `AttemptPolicy.require_frontier_bound`. It reads no artifact
+files, constructs no backend/registry, and performs no network, credential, native
+or model operation. Permit validity includes its current declared time window;
+issuer authenticity and actual artifact/runtime qualification remain unproven.
+
+All facts carry `evidence_kind=readiness`, `actual_model_execution=false` and
+`execution_allowed=false`. Structural validity never authorizes execution or
+proves training, provider availability, custody, licensing or product acceptance.
+The shared experiment-readiness consumer owns the combined decision. Mock checks
+are separate evidence and cannot become an actual-model result through this API.
+
+## Inference boundaries
+
 M7 includes a lazy local GLiNER adapter and a bounded HTTPS chat-completions transport.
 They have not loaded weights, downloaded models, opened network connections, or run
 inference. Execution is outside Dirty Mode. Importing modules/building the registry
@@ -33,6 +53,12 @@ Local preflight obtains original-text word positions, rejects dropped nonwhitesp
 characters, checks GLiNER's word limit and counts the processor's full label-prompt
 plus word sequence with truncation disabled. It then checks tokenizer and approved
 token caps before inference. Unsupported internal API/configuration fails closed.
+The local wrapper also validates an injected backend's preflight result: it must
+be a nonnegative integer (not a boolean or numeric string), no greater than the
+configured `max_input_tokens`. Invalid counts raise `invalid_output`; counts above
+the cap raise `truncated`. Both corpus preflight and per-call preflight enforce
+this before `predict`, so an injected loader cannot bypass the cap merely by
+returning an unchecked count.
 Returned entities must match original substrings at Python Unicode codepoint offsets;
 unknown labels, invalid confidence, bounds and extra entity fields fail the record.
 No normalization or text search repairs offsets. Astral emoji/combining marks/CRLF

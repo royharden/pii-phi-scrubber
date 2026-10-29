@@ -1,0 +1,120 @@
+# Local training executor source
+
+This package is construction source, not a trained model or measured result. No
+training, imports of model packages, backend calls, dataset generation or runtime
+checks were performed during construction. Runtime remains unverified. Dirty Mode
+must close and exact execution/resource/license/custody authority must exist before
+any training command is run. The templates are deliberately invalid/unapproved.
+
+`m7.training` is canonical; root `training` only re-exports it for old callers.
+`validate_training_plan(plan, permit)` validates v1 or v2 and never executes.
+`validate_training_receipt(receipt, plan, permit=None)` checks completed receipt
+structure/lineage; even success leaves independent audit and M7-02 acceptance open.
+v1 remains validation-only and cannot enter the executor.
+
+Future operator entrypoint (do not run during Dirty Mode):
+
+```text
+python scripts/train.py --plan PLAN --authorization PERMIT --validate-only
+python scripts/train.py --plan PLAN --authorization PERMIT --execute --staging-root STAGING
+```
+
+Validation is the default when neither mode flag is present. An optional staging
+root in validation mode checks local artifacts/environment without loading a model
+or creating a run/ledger. Validation does not authorize execution.
+
+## Execution interface and staged data
+
+`execute_training(plan, permit, *, root, engine=None, cancel=None, clock=now_utc)`
+returns a `TrainingRun/v2`. The production optional backend is `LocalGLiNEREngine`;
+a trusted injected `TrainingEngine.run(TrialContext) -> EngineResult` is supported
+for later controlled integration checks. Injected engines must obey all caps,
+call `context.heartbeat()` each step, and write a checkpoint only to
+`context.output_dir / 'checkpoint'`. Injection is not execution evidence.
+
+The dedicated staging root contains only approved local artifacts and executor
+outputs. A future operator must enforce OS/process isolation from sealed test
+files and make inputs read-only. Python path validation is not an OS sandbox. The
+executor has no sealed-bundle/test reader, never searches other directories and
+does not provision this isolation. Do not point it at an evaluator checkout.
+
+TrainingPlan/v2 pins exactly eight artifacts: `model` and `tokenizer` directory
+trees, and `train`, `dev`, `config`, `environment`, `license_packet`, `custody_audit`
+files. Every descriptor has `path` (forward-slash relative to staging), `kind`
+(`tree`/`file`) and exact lowercase `sha256`. Absolute/parent paths, symlinks and
+Windows junctions are rejected. File hashes cover bytes; tree hashes cover canonical
+JSON of sorted `[POSIX-relative-filename, file-sha256]` pairs, without whitespace.
+Inputs are checked before launch, each trial, and after backend completion.
+
+`prepare_training_dataset(records, gold, *, split='train'|'dev')` accepts D4's
+already-filtered `LogRecord` and `GoldRow` channels. No CorpusBundle or directory
+is accepted. It returns `TrainingDataset/v1`: `split` and `records`, each row having
+`record` (LogRecord/v1 JSON) and `gold` (`[{start,end,label}]`). Mixed splits,
+missing/duplicate/extra gold rows or content-hash mismatches fail. The loader also
+validates all bounds, duplicate messages/spans and train/dev message disjointness.
+This handoff does not substitute for D4's independent provenance/custody audit.
+Gold offsets remain original Python codepoints; no text normalization is permitted.
+
+The environment manifest pins exact Python patch version, package versions
+(`gliner`, `torch`, `transformers`, `accelerate`, `safetensors`), resource ID and
+device (`cpu` or `cuda:0`). It is inspected against the current interpreter before
+execution. It does not prove hardware identity or resource exclusivity. The
+training config pins labels, the 1,024-codepoint bound, token cap, decoder and label
+description hashes. Base/fine parity and selection locks are a later source seam.
+
+## Caps, failure accounting and lineage
+
+The immutable plan enumerates one to three trials (`trial_id`, `seed`, learning
+rate, batch size), at most three epochs, at most 1,000 optimizer steps and a
+per-trial duration cap. The local backend uses one device and no accumulation;
+its effective step cap also respects the epoch bound. Heartbeats enforce current
+permit, cancellation and duration between steps, not during a blocked native
+kernel. A future supervisor must terminate a hung kernel conservatively, retaining
+its unknown liability. No automatic retry or trial-count reset is implemented.
+
+Exclusive creation of `runs/<edition_id>` prevents a repeated or changed plan from
+silently starting more trials for that edition in the same staging area. Preserve
+that area across crashes; copying to a fresh staging root does not authorize more
+trials. `run-started.json`, trial `started.json`, `receipt.json` and `run.json` are
+exclusive-create, fsynced records. Partial/crashed writes fail closed. Recovery
+must account the original attempt; deleting a run to restart is prohibited.
+
+Every trial reserves its full worst-case cost with `m7.ledger.ReservationLedger`
+before backend loading. Accounting is shared per authorization in
+`accounting/<authorization_id>.sqlite`. Failed, OOM, cancelled and interrupted
+attempts retain reservations as unresolved liabilities. Unknown is never zero.
+Local compute cost is not guessed from duration; a genuine billing receipt is
+needed for known cost, and electricity/amortization remain separately unmeasured.
+Any actual overrun is recorded honestly and blocks further unaffordable work.
+
+Each actual attempted trial writes TrainingReceipt/v2 with plan/permit, trial/seed,
+all artifact hashes, timestamps/duration, ledger attempt, known/unknown cost and
+outcome. Completed outcomes add actual optimizer steps/epochs, checkpoint tree
+hash and relative path. Failed/OOM/cancelled outcomes have no successful checkpoint
+claim. Exception bodies, source values, model outputs and prompt/completion bodies
+are never persisted. A completed training receipt is not a selected checkpoint,
+pre-test target lock, held-out opening grant or final product acceptance.
+
+## Optional backend integration and deferred checks
+
+The backend loads only a local GLiNER artifact with `local_files_only=True` and no
+token lookup; offline and telemetry settings are restored afterward. The pinned
+`gliner_config.json` must point `model_name` at the separately pinned local
+backbone/tokenizer directory. Dependencies and weights must already be approved
+and staged; there is no install/download path. Library stdout/stderr/logging is
+discarded while training, and reporting/checkpoint autosaving is disabled.
+
+Exact token boundaries must align; unsupported gold boundaries/span widths fail
+rather than snap or disappear. All four labels are explicit in every training
+example, including benign examples. Batch word counts/masks and token caps guard
+tail truncation on every actual batch. Unicode/CRLF/astral and supported tokenizer
+behavior still require later runtime qualification.
+
+The integration follows upstream [model training source](https://github.com/urchade/GLiNER/blob/main/gliner/model.py)
+and [trainer source](https://github.com/urchade/GLiNER/blob/main/gliner/training/trainer.py),
+inspected 2026-10-23. Upstream's OOM-skipping step is bypassed in favor of the
+Transformers step so OOM fails the trial. `model._create_data_collator()` is a
+private upstream seam. Exact approved GLiNER/Transformers versions, small-v2.1
+artifact compatibility, offline loader/tokenizer behavior, callback/cap semantics,
+OOM/cancellation, crash accounting and checkpoint reload have not been exercised.
+No package is downloaded or version selected by this source.

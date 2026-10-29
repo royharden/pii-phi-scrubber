@@ -1,0 +1,76 @@
+"""Receipt-bound future execution gate. A shaped JSON packet is not approval."""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Callable, Literal
+
+from m7.contracts import Boundary, Digest, Identifier
+
+from .models import ArmPin, LockedEdition, commitment, utc_time
+
+
+class EvaluationAuthorization(Boundary):
+    schema_version: Literal['EvaluationAuthorization/v1'] = 'EvaluationAuthorization/v1'
+    authorization_id: Identifier
+    edition_id: Identifier
+    run_id: Identifier
+    plan_sha256: Digest
+    corpus_manifest_sha256: Digest
+    population_sha256: Digest
+    selection_lock_sha256: Digest
+    custody_release_sha256: Digest
+    independent_audit_sha256: Digest
+    adoption_policy_sha256: Digest
+    timing_plan_sha256: Digest
+    arm_pins: tuple[ArmPin, ...]
+    issued_at: str
+    expires_at: str
+    allowed_action: Literal['open_or_resume_locked_evaluation']
+
+
+class ReceiptAuthority:
+    """Trusted host verifies issuer/revocation for EACH externally pinned receipt.
+
+    No permissive fallback verifier exists. Verifier must authenticate actual receipt
+    contents/issuer and current revocation using its own trusted store, not simply
+    return true when a digest has the expected shape. D5 selection and D4 custody
+    gates are required even when the adapter set is empty. Revocation blocks resume.
+    """
+    def __init__(self, authorization: EvaluationAuthorization, *,
+                 verify_receipt: Callable[[str, str], bool]):
+        self.authorization = authorization
+        self.verify_receipt = verify_receipt
+
+    @staticmethod
+    def validate_binding(packet: EvaluationAuthorization, edition: LockedEdition) -> None:
+        """Pure binding/expiry check. Does not authenticate or consume custody open."""
+        now = datetime.now(timezone.utc)
+        if not utc_time(packet.issued_at) <= now < utc_time(packet.expires_at):
+            raise ValueError('evaluation_authorization_expired')
+        if (packet.edition_id != edition.edition_id or packet.run_id != edition.run_id
+                or packet.plan_sha256 != edition.plan_sha256
+                or packet.corpus_manifest_sha256 != edition.corpus_manifest_sha256
+                or packet.population_sha256 != commitment([r.model_dump(mode='json') for r in edition.population])
+                or packet.selection_lock_sha256 != edition.selection_lock_sha256
+                or packet.custody_release_sha256 != edition.custody_release_sha256
+                or packet.independent_audit_sha256 != edition.independent_audit_sha256
+                or packet.adoption_policy_sha256 != commitment(edition.adoption_policy.model_dump(mode='json'))
+                or packet.timing_plan_sha256 != edition.timing_plan_sha256
+                or packet.arm_pins != edition.arm_pins
+                or utc_time(packet.expires_at) < utc_time(edition.expires_at)
+                or commitment(packet.model_dump(mode='json')) != edition.execution_authorization_sha256):
+            raise ValueError('evaluation_authorization_binding_mismatch')
+
+    def __call__(self, edition: LockedEdition, resume: bool) -> None:
+        self.validate_binding(self.authorization, edition)
+        for kind, digest in (
+            ('evaluation_authorization', edition.execution_authorization_sha256),
+            ('custody_release', edition.custody_release_sha256),
+            ('independent_audit', edition.independent_audit_sha256),
+            ('pre_test_selection_lock', edition.selection_lock_sha256),
+        ):
+            if self.verify_receipt(kind, digest) is not True:
+                raise ValueError('receipt_not_authenticated_or_revoked')
+
+
+__all__ = ['EvaluationAuthorization', 'ReceiptAuthority']
