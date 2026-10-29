@@ -1,0 +1,60 @@
+# Adapter seam v1
+
+Canonical source: `m7.detectors.registry.build_registry(configs, permits, *, run_id,
+transports=None, counters=None, loaders=None, allow_execution=False, include_regex=True)`.
+Returns a mapping with `(LogRecord) -> Prediction` values. There is no provider I/O or
+artifact read when constructing the registry. Unconfigured arms are absent, never
+mocked. `allow_execution` defaults false; caller authority and a current approved
+receipt are both needed later. The external approval/signature check is an operator
+responsibility, not established by an `approved` boolean in a JSON file.
+
+`configs` maps `base`/`finetuned` to `LocalModelConfig` and `frontier` to
+`FrontierConfig`; `permits` has exactly the same keys and `ExecutionPermit` values.
+All are frozen strict boundary models. `config_digest` is canonical compact sorted
+JSON SHA256. `permit.check` binds config/run/model/scope, issued time and exclusive
+expiry. Artifact/tokenizer/license/authorization digests are artifact commitments,
+never hashes of entity values. No approved permit or fabricated output is shipped.
+
+`loaders[arm](LocalModelConfig) -> LocalBackend`, where
+`preflight(message) -> full_input_token_count` and `predict(LogRecord) -> TokenSpan`.
+Injected loaders obey the local manifest gate too. `transports['frontier']` accepts
+`(FrontierConfig, request_bytes) -> TransportResponse`; it must not persist/log
+requests, completions, headers or exception bodies. `counters['frontier']` supplies
+its pinned `sha256`, `request_tokens(payload)` including all prompt/framing tokens,
+and `completion_tokens(content)`; unknown counters fail closed, never estimate.
+
+Each configured adapter exposes `last_attempt: AttemptMetadata | None`, an allowlist
+of attempt ID, arm/model, status/error, invocation wall time and optional usage
+counts. It contains no record text, prompt/completion, quote/context or value hash.
+It is sequential-worker state, not a durable audit log. Prediction carries original
+input hash and offsets; `usage_ref` remains null until controller-ledger integration.
+One attempt only in W4A; transient retry/cancellation/reservation work is W4B.
+
+Predictions and failures keep the common `m7.contracts` vocabulary unchanged.
+Overlength/token-limit failures become `invalid_output/truncated`; malformed,
+ambiguous and partial anchoring retain the original strict `anchor_frontier` policy.
+Adapters never receive gold, provenance, family metadata or renderer callbacks.
+Corpus-wide preflight must precede comparison; per-record rejection still remains
+visible in the intended accounting population.
+
+JSON CLI envelope: `AdapterRegistry/v1` with exactly `schema_version`, `run_id`,
+`configs`, `permits`; mapping entries use the model fields in `m7.providers.contracts`.
+`scripts/infer.py --spec <path> --validate-only` performs no model execution or artifact
+access. Future `--execute-local --records <inference-jsonl>` emits only predictions.
+External transport requires programmatic injection and is not exposed by that CLI yet.
+No validation/inference command has been run in Dirty Mode.
+
+Each registry entry also has `preflight(tuple[LogRecord,...]) -> None`,
+`model_id`, `arm`, `configuration_sha256` and `artifact_sha256`.
+`bind_registry(registry, pins, *, run_id)` accepts only D7's sequence of `ArmPin`
+commitments and the edition run ID, and returns D7 `AdapterBinding` objects after
+exact run/model/identity/hash comparison before inference.
+It never receives an edition/custody/gold bundle. Regex artifact hash is the SHA256
+of `detectors/regex.py` bytes, read at explicit binding time; its configuration hash
+is SHA256 of `{"model_id":"context-regex-v1"}`. Local artifact hash pins weights;
+frontier artifact hash is the externally approved `model_revision_sha256` receipt
+commitment, not a claim that provider weights were obtained. Configuration hashes
+use `config_digest`. Caller permits/external approval must authenticate these pins.
+Whole-corpus preflight may lazily load authorized local artifacts/tokenize, but
+never performs local inference or invokes the frontier transport.
+

@@ -1,0 +1,54 @@
+"""Keyless public-fictional development journey; no model loading or network."""
+
+import argparse
+from pathlib import Path
+
+from _common import ROOT, emit, guarded, load_json
+from m7.contracts import LogRecord, Span
+from m7.detectors.regex import detect_regex
+from m7.publish import gate_record, write_report
+from m7.render import render
+from m7.runner import EvaluationRecord, run_offline
+
+
+def development_records():
+    fixture = load_json(ROOT / "data-development" / "public-fictional.json")
+    if fixture.get("evidence_kind") != "public_fictional_development":
+        raise ValueError("public_fixture_required")
+    return [EvaluationRecord(LogRecord.model_validate(row["record"]),
+                             tuple(Span.model_validate(span) for span in row["gold"]),
+                             row["block_id"], row.get("slice_name", "normal"))
+            for row in fixture["examples"]]
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--offline", action="store_true", required=True)
+    parser.add_argument("--out", type=Path, required=True)
+    args = parser.parse_args()
+    records = development_records()
+    decisions = []
+    def gate(record, gold, rendering):
+        decision = gate_record(record, gold, rendering)
+        decisions.append(decision)
+        return decision.as_dict()
+    bundle = run_offline(records, {"regex": lambda record: detect_regex(record, run_id="development")},
+                         publication_gate=gate)
+    if records:
+        # Intentional miss: empty prediction from an OK arm, scored separately upstream in future
+        # fault checks. Never present it as a successful scrub or alter the real regex metrics.
+        from m7.contracts import Prediction
+        example = next((row for row in records if row.gold), None)
+        if example is not None:
+            miss = Prediction(run_id="development", record_id=example.record.record_id,
+                              content_sha256=example.record.content_sha256, arm="regex",
+                              model_id="intentional-fault", attempt_id="fault-1", status="ok")
+            decisions.append(gate_record(example.record, example.gold, render(example.record, miss)))
+    write_report(bundle, args.out, decisions=decisions)
+    emit({"status": "development_report_written", "corpus_N": len(records),
+          "intentional_fault_card": True, "held_out_result": False})
+    return 0
+
+
+if __name__ == "__main__":
+    guarded(main)
