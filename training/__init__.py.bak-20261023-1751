@@ -1,8 +1,0 @@
-"""Compatibility imports only; canonical implementation lives in m7.training."""
-from m7.training import (
-    EngineResult, TrainingCancelled, TrainingEngine, TrainingOOM, TrialContext, execute_training,
-    validate_training_plan, validate_training_receipt,
-)
-
-__all__ = ["EngineResult", "TrainingCancelled", "TrainingEngine", "TrainingOOM", "TrialContext",
-           "execute_training", "validate_training_plan", "validate_training_receipt"]
