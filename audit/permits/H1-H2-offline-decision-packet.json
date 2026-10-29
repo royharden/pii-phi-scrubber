@@ -1,0 +1,73 @@
+{
+  "schema_version": "OfflineModelTrainingDecisionPacket/v1",
+  "evidence_kind": "readiness",
+  "status": "HOLD",
+  "execution_authority": false,
+  "actual_training_observed": false,
+  "m7_02_accepted": false,
+  "source": {
+    "selected_plan": "Plan_M7_Selected_v1.md",
+    "selected_plan_sha256": "387c1b56d6e8f2a65974d2f414d09079c42674010d3ca6250f1d0a4ed595039e",
+    "scope": "Existing offline project context only; no current metadata/rights query or artifact acquisition",
+    "historical_observation_date": "2026-10-20"
+  },
+  "H1": {
+    "decision": "HOLD",
+    "candidate": "urchade/gliner_small-v2.1",
+    "historical_license_description": "Selected plan recorded an Apache-2.0 model-card declaration; not a current rights clearance",
+    "current_rights_status": "unknown",
+    "current_availability_status": "unknown",
+    "immutable_model_revision": null,
+    "backbone_revision": null,
+    "tokenizer_revision": null,
+    "configuration_sha256": null,
+    "artifact_hashes": null,
+    "artifact_bytes": null,
+    "total_download_bytes": null,
+    "current_training_derivative_distribution_terms": null,
+    "required_before_acquisition": [
+      "Explicit metadata-only permission before contacting public primary sources",
+      "Exact immutable model, backbone, tokenizer, configuration and dependency revisions",
+      "Archived current terms for each selected artifact and intended training/derivative/distribution use",
+      "Expected file list, byte sizes, total disk/download cap and integrity commitments",
+      "Separate explicit artifact-download authorization after reviewing that packet"
+    ],
+    "recommended_next_decision": "Metadata-only permission may be considered by INT/Roy; downloads remain held until exact rights, revisions and size cap exist"
+  },
+  "H2": {
+    "decision": "HOLD",
+    "actual_model_or_training_run": "not_run",
+    "mock_training_is_actual_evidence": false,
+    "candidate_device": "cpu",
+    "hardware_feasibility_status": "unknown",
+    "maximum_trials": 3,
+    "maximum_epochs_per_trial": 3,
+    "maximum_optimizer_steps_per_trial": 1000,
+    "cpu_time_cap_seconds": null,
+    "disk_cap_bytes": null,
+    "exact_hardware_environment_manifest": null,
+    "training_package_versions": {
+      "gliner": null,
+      "torch": null,
+      "transformers": null,
+      "accelerate": null,
+      "safetensors": null
+    },
+    "required_before_actual_execution": [
+      "H1 rights and acquisition decisions closed for exact staged artifacts",
+      "Independent audited train/dev provenance and custody, with no sealed-test access",
+      "Hash-pinned TrainingPlan/v2 and current externally authenticated ExecutionPermit/v2",
+      "Pinned Python/model-library versions, resource identity and approved CPU time/disk limits",
+      "Immutable model/tokenizer/configuration and base/fine decoder/parity commitments",
+      "Worst-case reservations, failure/OOM/cancellation/recovery and conservative unknown-liability accounting",
+      "Explicit bounded actual-model authorization; no automatic cloud/GPU/provider escalation"
+    ],
+    "recommended_next_decision": "Retain HOLD pending the complete rights, feasibility, audited data and resource packet"
+  },
+  "unaffected_holds": ["H3", "H4", "H5", "H6"],
+  "limits": [
+    "This decision packet is preparation, not an approving receipt or runtime policy",
+    "No download, model import, actual training, frontier call or sealed test operation occurred",
+    "Mock receipts and local structural facts do not close actual training, scientific comparison or product acceptance"
+  ]
+}

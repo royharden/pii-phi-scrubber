@@ -1,0 +1,83 @@
+"""Validate adapter specifications; explicitly permitted LOCAL inference is opt-in.
+
+Future operator entrypoint. Construction has never run this script. External model
+execution is deliberately not wired here before the cost/attempt controller exists.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import sys
+
+from _common import emit, guarded, load_json
+from m7.contracts import LogRecord
+from m7.detectors.registry import build_registry
+from m7.providers.contracts import ExecutionPermit, FrontierConfig, LocalModelConfig, config_digest
+
+
+def read_spec(path: Path):
+    raw = load_json(path)
+    if (set(raw) != {"schema_version", "run_id", "configs", "permits"}
+            or raw["schema_version"] != "AdapterRegistry/v1"
+            or type(raw["configs"]) is not dict or type(raw["permits"]) is not dict):
+        raise ValueError("invalid_adapter_spec")
+    configs = {}
+    for arm, row in raw["configs"].items():
+        if arm not in ("base", "finetuned", "frontier"):
+            raise ValueError("unknown_arm")
+        # JSON validation preserves strict scalar types while allowing JSON arrays
+        # for the immutable tuple fields. Python-mode strict validation would
+        # incorrectly reject those arrays after load_json decoded them to lists.
+        configs[arm] = (FrontierConfig if arm == "frontier" else LocalModelConfig).model_validate_json(
+            json.dumps(row, allow_nan=False))
+    permits = {arm: ExecutionPermit.model_validate(row) for arm, row in raw["permits"].items()}
+    if set(configs) != set(permits):
+        raise ValueError("adapter_config_mismatch")
+    return raw["run_id"], configs, permits
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--spec", type=Path, required=True)
+    parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--execute-local", action="store_true")
+    parser.add_argument("--records", type=Path)
+    args = parser.parse_args()
+    if args.validate_only == args.execute_local:
+        raise ValueError("choose_exactly_one_mode")
+    run_id, configs, permits = read_spec(args.spec)
+    # Dry validation checks bindings/expiry, not receipt authenticity or artifacts.
+    for arm, config in configs.items():
+        permits[arm].check(run_id=run_id, model_id=config.model_id,
+            scope="frontier_inference" if arm == "frontier" else "local_inference",
+            config_sha256=config_digest(config))
+    if args.validate_only:
+        if args.records is not None:
+            raise ValueError("records_not_needed")
+        emit({"status": "spec_validated_only", "arms": sorted(configs),
+              "executed": False, "artifact_pins_checked": False,
+              "authorization_authenticity_checked": False})
+        return 0
+    if "frontier" in configs or args.records is None:
+        raise ValueError("local_execution_only")
+    registry = build_registry(configs, permits, run_id=run_id, allow_execution=True, include_regex=False)
+    seen = set()
+    with args.records.open("rb") as source:
+        while line := source.readline(32769):
+            if len(line) > 32768:
+                raise ValueError("record_line_limit")
+            record = LogRecord.model_validate_json(line)
+            if record.record_id in seen or len(seen) >= 1_000_000:
+                raise ValueError("record_identity_limit")
+            seen.add(record.record_id)
+            for arm, adapter in registry.items():
+                prediction = adapter(record)
+                # Only span wire, never source or rendered text, reaches stdout.
+                sys.stdout.write(json.dumps(prediction.model_dump(mode="json"), allow_nan=False) + "\n")
+    return 0
+
+
+if __name__ == "__main__":
+    guarded(main)
+

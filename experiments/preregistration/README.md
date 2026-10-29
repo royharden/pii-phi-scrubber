@@ -1,5 +1,9 @@
 # Lock before held-out access
 
+For current offline preparation, use [readiness requirements](readiness-requirements.md).
+The generated `readiness-schema.json` and missing-evidence fixture are
+`ExperimentReadiness/v1` data, never an experiment lock or execution approval.
+
 The JSON is an unapproved edition template, not a locked experiment or permit.
 Fill immutable model/tokenizer/weights/license/config pins, ancestry components,
 sampling proportions, seed, normal/challenge taxonomy, class thresholds, cost cap,

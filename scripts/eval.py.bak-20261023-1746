@@ -1,0 +1,45 @@
+"""Public development evaluation or nonexecuting sealed-lock validation.
+
+Authorized execution hosts call m7.experiment.execute_edition with a trusted
+receipt verifier; a CLI JSON file cannot grant itself custody/provider authority.
+"""
+
+import argparse
+from pathlib import Path
+
+from _common import emit, guarded
+from demo import development_records
+from m7.detectors.regex import detect_regex
+from m7.publish import gate_record, write_report
+from m7.runner import run_offline
+from m7.experiment import LockedEdition
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--edition", choices=("development",))
+    parser.add_argument("--validate-lock", type=Path,
+                        help="inspect a future lock only; never opens its edition")
+    parser.add_argument("--arms", choices=("regex", "none"), default="none")
+    parser.add_argument("--out", type=Path)
+    args = parser.parse_args()
+    if args.validate_lock:
+        if args.edition or args.out:
+            parser.error("lock_validation_is_separate_from_development")
+        edition = LockedEdition.model_validate_json(args.validate_lock.read_bytes())
+        edition.require_current()
+        emit({"status": "lock_shaped_not_authorized", "edition_sha256": edition.sha256,
+              "corpus_N": len(edition.population), "execution_allowed": False})
+        return 0
+    if args.edition != "development" or args.out is None:
+        parser.error("development_requires_edition_and_out")
+    records = development_records()
+    adapters = {"regex": lambda record: detect_regex(record, run_id="development")} if args.arms == "regex" else {}
+    bundle = run_offline(records, adapters, publication_gate=lambda r, g, v: gate_record(r, g, v).as_dict())
+    write_report(bundle, args.out)
+    emit({"status": "development_report_written", "corpus_N": len(records), "held_out_result": False})
+    return 0
+
+
+if __name__ == "__main__":
+    guarded(main)

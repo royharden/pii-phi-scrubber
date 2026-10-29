@@ -1,0 +1,9 @@
+{
+  "schema_version": "TrainingConfig/v1",
+  "labels": ["NAME", "EMAIL", "PHONE", "ACCOUNT_ID"],
+  "label_descriptions": ["person full name", "email address", "phone number", "account identifier"],
+  "max_message_codepoints": 1024,
+  "max_model_tokens": 512,
+  "decoder_sha256": null,
+  "label_descriptions_sha256": null
+}

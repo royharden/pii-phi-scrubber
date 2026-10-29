@@ -26,3 +26,13 @@ accounting/
 journals/
 timing/
 operator-local/
+
+.creds/
+ArchiveManager-creds.txt
+*.pem
+*.key
+*.p12
+*.pfx
+*.zip
+node_modules/
+
