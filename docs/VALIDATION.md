@@ -1,13 +1,36 @@
 # Local synthetic validation
 
-## W2 resumption — 2026-10-25
+## W2 combined-candidate checkpoint — 2026-10-26
 
-Wave1 source and documentation were accepted locally at main `8c23fce`; the older
-candidate checkpoint below is retained as history, including its then-pending
-reviews. W2 resumes that accepted baseline and prepares readiness/acceptance
-evidence without authorizing model acquisition, actual training, frontier calls,
-sealed data or native provisioning. Formal independent acceptance remains held.
-The [W8 inventory](acceptance/README.md) names the missing prerequisites.
+INT ran the full combined `check_local.ps1` gate on staged tree
+`27f5c33975600bff0b55981c62d8d8f1f88356b8`, using Windows PowerShell,
+Python 3.12.13, Pydantic 2.12.3, pytest 8.4.2 and Ruff 0.14.2:
+
+- **687 tests passed**, with zero failures, errors or skips: 505 accepted-baseline
+  cases plus 84 RV1-authored and 98 RV2-authored cases. This is one full combined
+  execution, distinct from the earlier standalone 505- and 98-case runs.
+- Root Ruff across `src`, `scripts`, `tests` and `evals` was clean.
+- Eight host public-development controls passed, zero failed. Their summary
+  records `model_execution=false`, `held_out_result=false` and
+  `product_acceptance=false`.
+
+The staged inputs were D9 `7d490898`, D10 `08adff02`, D11 `a07b6cea`,
+D8 `7c1bb28d`, RV1 `f6e8bd85` and RV2 `a42b6157`. W2 source is not yet installed
+on `main` at this checkpoint; the fresh Docker check is pending. These host tests
+validate local fictional/mock/readiness behavior. They establish no real-model,
+scientific, privacy, deployment or formal W8 product acceptance. Later candidate
+changes require their affected checks and review.
+
+Effie's delegated decision of 2026-10-25 permits H1 public no-login, read-only
+metadata/licence/terms lookups, with source URL and retrieval time recorded. This
+is a delegated decision, not Roy's personal signature. Model, weight, backbone
+and tokenizer downloads remain restricted. Metadata permission does not supply
+approved artifact rights, immutable revisions/hashes, a size cap, actual weights
+or execution authority. H2 actual-model training/evaluation, H3 live frontier,
+H4 new custody/auditor staffing and sealed access, H5 real native qualification,
+and H6 formal acceptance remain restricted. No final acceptance reviewer is
+appointed; scientific readiness and the product packet stay **NOT_READY**.
+See the [W8 inventory](acceptance/README.md) for unmet prerequisites.
 
 D8 reran only the bounded keyless fictional demo twice for this new walkthrough.
 Both runs exited zero, reported eight records and one suppression card, and
@@ -15,7 +38,7 @@ produced identical HTML bytes; see [demo](demo.md) for the command and digest.
 This is repeatability evidence, not a second full-suite claim, actual-model result
 or human timed rehearsal. No held operation was attempted.
 
-## R03 candidate checkpoint — 2026-10-25
+## Historical wave1 candidate checkpoint — 2026-10-25
 
 PB-M7-R03 is in normal mode. INT observed the following on its combined candidate
 tree `bddbb0466911613b64079502f307b5891572832b`, using Windows PowerShell,
@@ -34,19 +57,12 @@ spans, failed-record denominators, insufficient independent blocks, escaped leak
 suppression, a SQLite cap race/durable liability, and the public demo/eval CLI
 journey. Development HTML was generated; this is not a timed demo rehearsal.
 
-This is a candidate checkpoint, not a statement that these changes have landed on
-`main`. This documentation branch alone does not contain all combined repairs or
-the new bootstrap/check/eval scripts. Final integration and combined-tree acceptance
-belong to INT. At this checkpoint, the bootstrap portability repair awaits High
-review, and combined Docker image rebuild/verification remains pending. The earlier
-standalone Docker eight-check run does not validate the combined repairs.
-
-Private run evidence is retained outside the product repo under
-`agentops/runs/PB-M7-R03/`: `evidence/INT3-local-check-r2.log`,
-`evidence/INT3-public-eval-r2.log` and the INT integration worktree's JUnit XML
-`pytest-ff53ba45a7ac4d679d686905ab175232.xml`. These are run receipts, not portable
-product dependencies. The counts above describe that checkpoint; a later candidate
-requires fresh checks.
+At that historical checkpoint, bootstrap portability review and combined Docker
+verification were still pending. Wave1 was subsequently accepted locally at main
+`8c23fce`; that does not imply W2 installation or full product acceptance. The
+earlier standalone Docker eight-check run does not validate the W2 combined tree.
+Maintainer-held logs, JUnit XML and public-control summaries preserve these dated
+observations; they are evidence receipts, not product runtime dependencies.
 
 ## Reproduce after integration
 

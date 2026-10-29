@@ -1,7 +1,8 @@
 # Locked-edition evaluator
 
-Source construction only; this flow has not run. No sealed dataset, approved lock,
-training receipt, model/provider execution or scientific result is supplied here.
+Local synthetic contract and CLI tests have run. No real sealed dataset, approved
+scientific lock, actual training, model/provider comparison or scientific result
+is supplied by that validation.
 
 `m7.experiment.execute_edition` is the future authorized host API. It takes a
 `LockedEdition`, standalone inference records, a separate tuple of `CustodyGold`,
@@ -141,8 +142,8 @@ gold-free artifact or repeats model calls. The README documents each future mode
 
 For a shape-only future check: `python scripts/eval.py --validate-lock <lock.json>`.
 This does not authenticate, seal, open or execute the edition. Programmatic execution
-must be activated only after Dirty Mode closes and actual custody/license/resource
-and environment gates have been satisfied.
+must be activated only under current execution authority after actual custody,
+license/resource and environment gates have been satisfied.
 
 ## Joined isolated campaign
 
@@ -260,3 +261,50 @@ optional bind_timing_authority bridge is not required by this consumer.
 The returned D4 authority uses WindowsTimingProcessGuard over the same original
 lifecycle, host process verifier and exact campaign launch policies. No native
 probe occurs during construction; every future message requires current proof.
+
+## Read-only scientific readiness (W2)
+
+`python scripts/eval.py --readiness` emits the canonical missing/held
+`ExperimentReadiness/v1` report and exits 3 because scientific readiness is not
+established. This mode accepts no execution/host/file/output arguments, imports
+no operator plugin and writes no artifact. Normal CLI behavior is unchanged.
+
+Programmatic callers use `m7.experiment.readiness.assess_readiness` with optional
+in-memory public fictional/mock inputs: `component_facts`, `provider_facts`,
+`training_facts`, `training_plan`,
+`training_permit`, `edition`, `authorization`, `launch_bundle`, `result_bundle`,
+`cost_summary`, and `evidence_kind` (`readiness` or `mock`). No caller-supplied
+paths or authority callbacks are accepted. The canonical source validators are
+`validate_training_plan`, `LockedEdition`, `ReceiptAuthority.validate_binding`,
+`validate_campaign_inputs`, `public_aggregate` and `cost_report`; only their pure
+structural paths are used. Runtime gates and old receipt formats are unchanged.
+
+D9 supplies a `ComponentFact(component='providers', state=..., evidence_sha256=...)`;
+D10 supplies `artifacts` and `training`. States are `missing`, `held`, `mock`,
+`shape_valid`, `invalid`, or `unknown`. Mock/shape-valid observations require the
+producer's value-free report digest. These are attributed facts, not authentication,
+rights or authority. Do not hash entity values or pass raw source into these facts.
+Missing producers are explicit missing checks. Duplicate components are refused.
+Prefer the producer-owned `ProviderFacts` from `m7.providers.readiness` and
+`TrainingArtifactFacts` from `m7.training.readiness` through `provider_facts` and
+`training_facts`. D11 revalidates those canonical models and projects only their
+fixed observation states and report commitments. It never calls producer artifact
+inspection. Invalid/unavailable producer schemas become fixed invalid checks;
+observations cannot replace held acquisition, training or execution authority.
+
+Consumers parse with `ExperimentReadiness.model_validate_json`. The closed wire
+contains fixed status `NOT_READY`, `actual_model_execution=false`,
+`execution_allowed=false`, `product_acceptance=false`, exact ordered H1-H6 holds,
+ordered fixed-enum `checks` and derived `blockers`, optional four-arm numeric
+`accounting`, and a narrow `cost` projection. Free-text explanations, paths,
+source values, metric tables and exception bodies are excluded. Errors become
+fixed `input_invalid` checks. A valid result population is compared with the
+edition's exact population commitment when an edition is supplied. No failed or
+unattempted record is silently dropped. Unknown total economics stay null even
+when provider invoice cash is known to be zero.
+
+Even every structural check passing leaves H1-H6 held. This assessment never
+certifies execution, blind custody, real native enforcement, model superiority
+or finished-product acceptance. D8 consumes this canonical report rather than
+implementing a second gate decision. See the
+[H3/H4/H5 preparation requirements](../experiments/preregistration/readiness-requirements.md).

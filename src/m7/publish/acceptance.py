@@ -12,7 +12,9 @@ def _canonical(readiness):
 
     try:
         if type(readiness) is ExperimentReadiness:
-            encoded = readiness.model_dump_json()
+            # Serializer warnings can include source values from forged models.
+            # Raise inside this boundary so only the fixed refusal escapes.
+            encoded = readiness.model_dump_json(warnings='error')
         elif type(readiness) is dict:
             encoded = json.dumps(readiness, allow_nan=False)
         else:

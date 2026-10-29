@@ -1,0 +1,16 @@
+"""Corpus/custody producer API. CorpusBundle is evaluator-private, never detector input."""
+from .models import (
+    Ancestor, BlockAssignment, CorpusBundle, CorpusManifest, CorpusPlan, Family,
+    FamilyInventory, GoldRow, Lexicon, Recipe, RecordProvenance, SealAuthorization,
+    Segment, SplitAudit,
+)
+from .provenance import allocate_blocks, audit_inventory, canonical_bytes, commitment, family_components
+from .corpus import generate_development, inference_records, near_duplicate_audit, seal_corpus, verify_bundle
+
+__all__ = [
+    'Ancestor', 'BlockAssignment', 'CorpusBundle', 'CorpusManifest', 'CorpusPlan', 'Family',
+    'FamilyInventory', 'GoldRow', 'Lexicon', 'Recipe', 'RecordProvenance', 'SealAuthorization',
+    'Segment', 'SplitAudit', 'allocate_blocks', 'audit_inventory', 'canonical_bytes',
+    'commitment', 'family_components', 'generate_development', 'inference_records',
+    'near_duplicate_audit', 'seal_corpus', 'verify_bundle',
+]
